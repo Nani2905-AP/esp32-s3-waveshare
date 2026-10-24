@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32-S3-Waveshare</title>
+<meta name="description" content="Learn industrial automation on an interactive Waveshare ESP32-S3-POE-ETH-8DI-8DO: digital inputs, digital outputs, RS485, CAN, Wi-Fi and PoE — with runnable sketch simulations.">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== Top bar ===== -->
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-logo" viewBox="0 0 40 40" aria-hidden="true">
+        <rect x="3" y="3" width="34" height="34" rx="7" fill="none" stroke="currentColor" stroke-width="2.4"/>
+        <rect x="7.5" y="7.5" width="25" height="25" rx="3.5" fill="none" stroke="currentColor" stroke-width="2"/>
+        <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M13 6v6M20 6v6M27 6v6M13 28v6M20 28v6M27 28v6M6 13h6M6 20h6M6 27h6M28 13h6M28 20h6M28 27h6"/>
+        </g>
+      </svg>
+      <div class="brand-text">
+        <h1>ESP32-S3-Waveshare</h1>
+        <p>Explore · Wire · Run</p>
+      </div>
+    </div>
+
+    <nav class="topnav" aria-label="Main">
+      <button class="nav-btn is-active"   data-nav="home">Home</button>
+      <button class="nav-btn"             data-nav="lessons">Lessons</button>
+      <button class="nav-btn"             data-nav="pinout">Pinout</button>
+      <button class="nav-btn"             data-nav="simulator">Simulator</button>
+    </nav>
+
+    <div class="status">
+      <button class="theme-btn" id="theme-btn" title="Toggle light / dark theme">☀️</button>
+      <div class="progress-chip" title="Lessons completed">
+        <span class="progress-track"><span class="progress-fill" id="progress-fill"></span></span>
+        <span class="progress-count" id="progress-count">0/11</span>
+      </div>
+      <time class="clock" id="clock"><span id="clock-date"></span><span id="clock-time"></span></time>
+    </div>
+  </header>
+
+  <!-- ===== Main stage ===== -->
+  <main class="stage">
+
+    <!-- Left: the interactive board -->
+    <section class="panel board-panel" aria-label="Interactive board">
+      <div class="panel-head">
+        <h2>The board</h2>
+        <span class="hint">Hover a part to inspect · click to open its reference</span>
+      </div>
+      <div class="board-scroll">
+        <div id="frame-container"></div><!-- SVG injected here -->
+      </div>
+      <div class="bench">
+        <div class="bench-block" id="bench-di">
+          <h3>Inputs <small>toggle a wire to test</small></h3>
+          <div class="switch-row" id="di-switches"></div>
+        </div>
+        <div class="bench-block" id="bench-do">
+          <h3>Outputs <small>loads on channels DO1–DO8</small></h3>
+          <div class="lamp-row" id="do-lamps"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: content panel -->
+    <section class="panel content-panel" id="content-panel"></section>
+  </main>
+</div>
+
+<script src="three.min.js"></script>
+<script src="board3d.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

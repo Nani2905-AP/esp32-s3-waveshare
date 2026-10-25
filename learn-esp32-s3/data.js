@@ -1,25 +1,23 @@
 /* ============================================================
    ESP32-S3-Waveshare — data: parts, pinout, lessons
    (All GPIO numbers follow the official Waveshare documentation
-   for the ESP32-S3-POE-ETH-8DI-8DO board.)
+   for the ESP32-S3-ETH-8DI-8RO relay board.)
    ============================================================ */
 
 const PARTS = [
   { id:'power', name:'Power terminal (V+ / V−)', kw:'DC 7–36 V wide input, industrial buck supply',
-    short:'Screw terminal for the external DC supply. Anything from a 9 V wall-wart to a 24 V industrial PSU works.' },
-  { id:'poe',   name:'PoE module (802.3af)', kw:'Power over Ethernet, class detection, single-cable power',
-    short:'Lets one Ethernet cable carry both the network and the power. Only kicks in when a PoE switch/injector is in the chain.' },
-  { id:'eth',   name:'W5500 Ethernet (RJ45)', kw:'GPIO12 INT · GPIO13 MOSI · GPIO14 MISO · GPIO15 SCLK · GPIO16 CS · GPIO39 RST — 10/100 Mbps over SPI',
-    short:'A hard-wired TCP/IP chip the ESP32-S3 talks to over SPI. Runs while Wi-Fi sleeps — and it doubles as the PoE inlet.' },
+    short:'Screw terminal for the external DC supply. Anything from a 9 V wall-wart to a 24 V industrial PSU works. A Type-C port (5 V) does the same job on the bench.' },
+  { id:'ro',    name:'Relay outputs RO1–RO8', kw:'EXIO1…EXIO8 via TCA9554PWR I/O expander · each relay 1NO + 1NC · contact ≤10 A 250 VAC / ≤10 A 30 VDC · optocoupler driven',
+    short:'Eight real electromechanical relays. Energize the coil and the contact snaps COM→NO closed (COM→NC opens). They switch mains-size loads your microcontroller could never touch directly.' },
+  { id:'eth',   name:'W5500 Ethernet (RJ45)', kw:'GPIO12 INT · GPIO13 MOSI · GPIO14 MISO · GPIO15 SCLK · GPIO16 CS — 10/100 Mbps over SPI',
+    short:'A hard-wired TCP/IP chip the ESP32-S3 talks to over SPI. Runs while Wi-Fi sleeps — boring, dependable, deterministic.' },
   { id:'usbc',  name:'USB Type-C', kw:'5 V power, flashing, USB-serial debug',
     short:'Your everyday door into the board: power it, flash it, watch the serial log — all through this one little socket.' },
   { id:'tf',    name:'TF / microSD slot', kw:'GPIO45 D0 · GPIO47 CMD · GPIO48 SCK — SPI mode',
     short:'Log data, host web files or store images on card instead of cramming them into flash.' },
-  { id:'rs485', name:'Isolated RS485 (A+ / B−)', kw:'GPIO17 TX · GPIO18 RX · GPIO21 RTS, auto-direction, TVS + surge protection',
-    short:'Old-school industry favourite. Talks to Modbus RTU sensors, VFD drives and expansion modules despite meter-long cables.' },
-  { id:'can',   name:'Isolated CAN (H / L)', kw:'GPIO2 TWAI TX · GPIO3 TWAI RX, hardware auto-direction, TVS protection',
-    short:'Car-grade two-wire bus. Great for motor controllers, BMS units, or mixing industrial gear from different vendors.' },
-  { id:'rtc',   name:'RTC clock chip', kw:'GPIO40 INT · GPIO41 SCL · GPIO42 SDA (I²C)',
+  { id:'rs485', name:'Isolated RS485 (A+ / B−)', kw:'GPIO17 TX · GPIO18 RX, onboard 120 Ω terminator (jumper), TVS + surge protection',
+    short:'Old-school industry favourite. Talks to Modbus RTU sensors, VFD drives and expansion relay modules despite meter-long cables.' },
+  { id:'rtc',   name:'RTC clock chip (PCF85063)', kw:'GPIO40 INT · GPIO41 SCL · GPIO42 SDA (I²C)',
     short:'A timer that keeps humming even when the main loop is busy — ideal for “run the pump every 15 min” jobs.' },
   { id:'mcu',   name:'ESP32-S3-WROOM-1U module', kw:'Xtensa LX7 dual-core @240 MHz · 16 MB flash · 8 MB PSRAM · Wi-Fi + Bluetooth LE · external antenna',
     short:'The brain. Fits the whole Zigbee/WiFi/BLE radio stack plus your program inside that little metal shield.' },
@@ -27,20 +25,20 @@ const PARTS = [
     short:'Wi-Fi and Bluetooth hop outside the metal case via a screw-on antenna — never power RF on without it.' },
   { id:'rgb',   name:'WS2812 RGB status LED', kw:'GPIO38, one-wire addressable',
     short:'A mood pixel for the panel: green = happy, red = can’t shut down, blue = connecting, rainbow = it is alive and confused.' },
-  { id:'leds',  name:'Indicator LEDs (PWR / TXD / RXD / CAN)', kw:'red power · green TX · blue RX · purple CAN',
-    short:'Tiny traffic lights baked onto the plate: power is on, RS485 is transmitting, something is replying, CAN is blinking.' },
+  { id:'leds',  name:'Indicator LEDs (PWR / TXD / RXD)', kw:'red power · green RS485 TX · blue RS485 RX',
+    short:'Tiny traffic lights baked onto the plate: power is on, RS485 is transmitting, something is replying.' },
   { id:'buzzer',name:'Buzzer', kw:'GPIO46, PWM beep',
     short:'A tiny blackmail device: one beep and every worker walks over to see who pressed what.' },
   { id:'boot',  name:'BOOT button', kw:'GPIO0 (pressed = LOW), also used at reset to enter download mode',
     short:'Double life: while held during power-up it forces the bootloader; during runtime it’s just an extra input you can read from code.' },
+  { id:'reset', name:'RESET button', kw:'chip enable line — toggling it reboots the ESP32-S3',
+    short:'The panic button for your process: one tap and the whole controller restarts, outputs drop to power-on defaults.' },
   { id:'di',    name:'Digital inputs DI1–DI8', kw:'GPIO4…GPIO11 · 5–36 V · optocoupler isolated · dry contact / NPN / PNP',
     short:'Eight optocoupled “did something happen?” lines. They drink from sensors like switches, PIR modules, relays, limit switches.' },
-  { id:'do',    name:'Digital outputs DO1–DO8', kw:'EXIO1…EXIO8 control lines · Darlington open-drain sink · 500 mA per channel · flanking built-in flyback diode · 5–40 V loads',
-    short:'Eight beefy transistor channels. They don’t source voltage — they sink your load’s return path to ground, PLC-style.' },
-  { id:'iso',   name:'Isolated power & optos', kw:'DC-DC isolation between logic and field side, bidirectional optocouplers',
+  { id:'iso',   name:'Isolated power & optos', kw:'DC-DC isolation between logic and field side, bidirectional optocouplers on every channel',
     short:'A moat of light. Field wiring mistakes stay in the field; the ESP32 side never feels the surge.' },
   { id:'header',name:'Expansion pin header', kw:'spare GPIOs broken out for sensors, RS232, i²c extras',
-    short:'A little hedge: when DI and DO are not enough, raw GPIOs are waiting on the header for your navbar experiments.' },
+    short:'A little hedge: when eight relays are not enough, raw GPIOs are waiting on the header for your next experiment.' },
 ];
 
 const PIN_GROUPS = [
@@ -54,15 +52,15 @@ const PIN_GROUPS = [
     {pin:'GPIO10', what:'DI7 sense line', note:''},
     {pin:'GPIO11', what:'DI8 sense line', note:''},
   ]},
-  { title:'Digital output channels', rows:[
-    {pin:'EXIO1', what:'DO1 control line', note:'Onboard I/O expander — the demo Waveshare firmware drives these from software'},
-    {pin:'EXIO2', what:'DO2 control line', note:'Darlington sink output, each channel up to 500 mA'},
-    {pin:'EXIO3', what:'DO3 control line', note:''},
-    {pin:'EXIO4', what:'DO4 control line', note:''},
-    {pin:'EXIO5', what:'DO5 control line', note:''},
-    {pin:'EXIO6', what:'DO6 control line', note:''},
-    {pin:'EXIO7', what:'DO7 control line', note:''},
-    {pin:'EXIO8', what:'DO8 control line', note:'Flyback diode already inside — drive relays and valves directly'},
+  { title:'Relay output channels (TCA9554PWR I/O expander, addr 0x20)', rows:[
+    {pin:'EXIO1', what:'RO1 relay coil', note:'1NO + 1NC contact · ≤10 A 250 VAC / ≤10 A 30 VDC'},
+    {pin:'EXIO2', what:'RO2 relay coil', note:'Coil driven through optocoupler — logic side never touches the load'},
+    {pin:'EXIO3', what:'RO3 relay coil', note:''},
+    {pin:'EXIO4', what:'RO4 relay coil', note:''},
+    {pin:'EXIO5', what:'RO5 relay coil', note:''},
+    {pin:'EXIO6', what:'RO6 relay coil', note:''},
+    {pin:'EXIO7', what:'RO7 relay coil', note:''},
+    {pin:'EXIO8', what:'RO8 relay coil', note:'Each relay breaks out COM, NC and NO screw terminals'},
   ]},
   { title:'Ethernet (W5500 over SPI)', rows:[
     {pin:'GPIO12', what:'ETH_INT',   note:'Interrupt from W5500'},
@@ -70,19 +68,15 @@ const PIN_GROUPS = [
     {pin:'GPIO14', what:'ETH_MISO',  note:'Data in from W5500'},
     {pin:'GPIO15', what:'ETH_SCLK',  note:'SPI clock'},
     {pin:'GPIO16', what:'ETH_CS',    note:'SPI chip select'},
-    {pin:'GPIO39', what:'ETH_RST',   note:'Hard reset for the W5500'},
   ]},
   { title:'Field buses & radios', rows:[
-    {pin:'GPIO17', what:'RS485 TX', note:' Automatically direction-controlled, 9600 baud in the Waveshare demo'},
+    {pin:'GPIO17', what:'RS485 TX', note:'Isolated transceiver, A+/B− terminal, 120 Ω terminator jumper'},
     {pin:'GPIO18', what:'RS485 RX', note:''},
-    {pin:'GPIO21', what:'RS485 RTS/DE', note:'Reuse for half-duplex turnaround'},
-    {pin:'GPIO2',  what:'CAN TX',   note:'ESP32-S3 native TWAI controller'},
-    {pin:'GPIO3',  what:'CAN RX',   note:''},
     {pin:'GPIO4…11',what:'DI sense lines', note:'also reused for digital inputs'},
     {pin:'Wi-Fi / BLE', what:'built into ESP32-S3', note:'never power on Wi-Fi or BLE without the SMA antenna attached'},
   ]},
   { title:'Board services', rows:[
-    {pin:'GPIO40', what:'RTC_INT', note:'RTC alarm interrupt'},
+    {pin:'GPIO40', what:'RTC_INT', note:'RTC alarm interrupt (PCF85063)'},
     {pin:'GPIO41', what:'RTC_SCL', note:'I²C clock for the clock chip'},
     {pin:'GPIO42', what:'RTC_SDA', note:'I²C data for the clock chip'},
     {pin:'GPIO38', what:'RGB LED', note:'One WS2812 pixel — chain addressable'},
@@ -94,7 +88,6 @@ const PIN_GROUPS = [
   ]},
   { title:'Power', rows:[
     {pin:'V+ / V−', what:'7–36 V DC input', note:'Screw terminal, wide-voltage buck inside'},
-    {pin:'PoE',     what:'IEEE 802.3af',    note:'Through the same RJ45 cable — needs a PoE switch or injector'},
     {pin:'USB-C',   what:'5 V @ 1 A',       note:'Also does firmware flashing and USB-serial'},
   ]},
 ];
@@ -105,20 +98,22 @@ const LESSONS = [
   {
     id:'l1', num:1, title:'Meet the controller',
     sub:'What is that metal box on the rail, and why is it blinking green?',
-    goal:'Get the map in your head: one ESP32 in the middle, headphones to inside, fans to outside, and all the screw terminals around it.',
+    goal:'Get the map in your head: one ESP32 in the middle, eight relay clicks and eight sensor wires around it, all behind optocouplers.',
     body:`
-      <p>This metal DIN-rail box is the Waveshare <b>ESP32-S3-POE-ETH-8DI-8DO</b>. The name is the spec sheet:
-      an <span class="term">ESP32-S3</span> microcontroller, powered by <span class="term">Power-over-Ethernet</span>,
-      speaking <span class="term">Ethernet</span>, carrying <b>8 digital inputs</b> and <b>8 digital outputs</b>.</p>
+      <p>This metal DIN-rail box is the Waveshare <b>ESP32-S3-ETH-8DI-8RO</b>. The name is the spec sheet:
+      an <span class="term">ESP32-S3</span> microcontroller, speaking <span class="term">Ethernet</span>,
+      carrying <b>8 digital inputs</b> and <b>8 relay outputs</b>.</p>
       <p><b>Inputs listen, outputs act.</b> That one sentence is most of industrial automation:</p>
       <ul>
         <li><b>DI1–DI8</b> — screw terminals on the input side. A wire closes → the optocoupler lights up → the ESP32 sees a LOW. All 8 channels are <span class="term">optocoupled</span>, so a wiring mistake on the floor can’t fry the chip.</li>
-        <li><b>DO1–DO8</b> — on the other side. Each channel is a <span class="term">Darlington transistor</span> that <i>sinks</i> up to 500 mA. You wire your 24 V lamp between +24 V and the DO terminal; when the channel conducts, the lamp lights. Flyback diode is already inside, so relays and valves are fair game.</li>
-        <li><b>RS485 A+/B−</b> and <b>CAN H/L</b> — two-wire field buses, also isolated, for talking to sensors and motor drives meters away.</li>
-        <li><b>RJ45 + PoE</b> — one cable, network <i>and</i> power, IEEE 802.3af.</li>
-        <li><b>USB-C</b> — your bench door: power, flashing and a serial log, all through this tiny socket.</li>
+        <li><b>RO1–RO8</b> — eight <b>electromechanical relays</b>, each breaking out <b>COM, NC and NO</b> screw terminals and switching up to <span class="term">10 A at 250 VAC</span>. Energize the coil and the contact physically snaps: COM connects to NO, NC opens. Mains lamps, contactors, pumps — the metal box does the heavy lifting, not the chip.</li>
+        <li><b>RS485 A+/B−</b> — an isolated two-wire field bus for talking to Modbus sensors and expansion relay modules meters away. There’s even an onboard <b>120 Ω terminator</b> behind a jumper.</li>
+        <li><b>RJ45 + W5500</b> — hard-wired 10/100 Ethernet for the boring, dependable control path.</li>
+        <li><b>USB-C + 7–36 V terminal</b> — power it from your laptop or from the plant’s 24 V rail.</li>
         <li>Plus a <b>buzzer</b>, a <b>WS2812 RGB LED</b>, an <b>RTC</b> and a <b>TF slot</b> for logging.</li>
       </ul>
+      <p>The relays are driven through a tiny onboard <b>I/O expander</b> (TCA9554 at address <span class="term">0x20</span>) —
+      that’s why the firmware calls its control lines <b>EXIO1…EXIO8</b> instead of plain GPIOs.</p>
       <p>On the next lessons we wire it up — no soldering required, just clicks and code. Start with <b>lesson 2</b>!</p>
       <p class="tip-inline">💡 Tip: hover any block on the board on the left — the little card explains what it does, with the exact GPIO involved.</p>
     `,
@@ -152,24 +147,28 @@ void loop() {
   },
   {
     id:'l3', num:3, title:'Outputs & linkage: switch → lamp',
-    sub:'Close DI1, the DO1 channel conducts and your 24 V lamp lights. This is a wire-saving PLC pattern.',
-    goal:'Learn the sinking-output model (your load lives between supply + and the DO terminal) and wire the two sides together in code.',
+    sub:'Close DI1, relay RO1 clicks and your lamp lights. This is a wire-saving PLC pattern.',
+    goal:'Learn dry-contact relay wiring (your load lives between the supply and COM/NO) and wire the two sides together in code.',
     body:`
-      <p>The DO channels are unusual: they are <b>open-drain sinking</b> outputs. They don’t push out voltage; they give your
-      load a path to ground. So the wiring is: <pre class="inline-code">+24 V  →  lamp  →  DO terminal  →  transistor  →  GND</pre>
-      When the software says <span class="term">HIGH</span>, the transistor conducts, current flows, the lamp lights.</p>
+      <p>The relay outputs are the honest, old-school kind: an <b>electromechanical contact</b>. Each channel gives you
+      three terminals — <span class="term">COM</span>, <span class="term">NC</span> (normally closed) and
+      <span class="term">NO</span> (normally open). With the coil idle, COM touches <b>NC</b>; energize the coil and it
+      <b>snaps over to NO</b> with a satisfying click.</p>
+      <p>So the lamp wiring is dead simple, polarity-free: <pre class="inline-code">+24 V  →  lamp  →  NO terminal  →  (contact closes)  ←  COM  ←  GND</pre>
+      When the software says <span class="term">HIGH</span>, the coil energizes, the contact closes, the lamp lights.
+      Unlike a transistor, a relay contact doesn’t care about voltage polarity, AC or DC — and 10 A can flow through it.</p>
       <p>The input side works the other way around: a closed sensor <i>pulls</i> the line down to <span class="term">LOW</span>.
       Thresholds in code:</p>
       <ul>
         <li><code>digitalRead(GPIO4) == LOW</code> → the DI1 wire is <b>closed</b> (input active)</li>
-        <li><code>digitalWrite(EXIO1, HIGH)</code> → the DO1 channel <b>conducts</b> (output active)</li>
+        <li><code>digitalWrite(EXIO1, HIGH)</code> → relay RO1 <b>energizes</b> (COM→NO closed)</li>
       </ul>
-      <p>The control lines for the outputs are named <span class="term">EXIO1…EXIO8</span> — they reach the channels through a
-      tiny onboard expander (that’s the firmware’s shorthand). <b>Linkage</b> is just: read the input, write the output,
-      forever, very fast. That elegantly boring loop is 90% of industrial code.</p>
+      <p>The control lines for the relays are named <span class="term">EXIO1…EXIO8</span> — they reach the coils through an
+      onboard <span class="term">I²C expander</span> (that’s the firmware’s shorthand). <b>Linkage</b> is just: read the input,
+      write the output, forever, very fast. That elegantly boring loop is 90% of industrial code.</p>
       <p>Wire it in the bench: close <b>SW1</b> → <b>L1</b> should glow. Open it again and the lamp dies — no code needed beyond this lesson’s sketch.</p>
-      <div class="warnbox">In the real world a raw 24 V lamp on a transistor is fine (the flyback diode already inside), but for anything
-      inductive like a motor or big contactor coil keep the rated voltage well above 40 V and never exceed 500 mA per channel.</div>
+      <div class="warnbox">Relay contacts wear out: for inductive loads (motors, big contactor coils) use an RC snubber or a
+      varistor across the contact, fuse the circuit, and stay far below the 10 A rating for anything starting under load.</div>
     `,
     code:`void setup() {
   Serial.begin(115200);
@@ -179,7 +178,7 @@ void loop() {
   // field side: a limit switch on DI1 (GPIO4), closed = part present
   int active = (digitalRead(GPIO4) == LOW);
 
-  // output side: EXIO1 toggles the DO1 channel (sinks through your 24 V lamp)
+  // output side: EXIO1 energizes relay RO1 (contact closes, lamp lights)
   if (active) {
     digitalWrite(EXIO1, HIGH);   // lamp ON
   } else {
@@ -337,7 +336,7 @@ void loop() {
     sub:'The board becomes its own hotspot and hands out web pages.',
     goal:'Understand the Wi-Fi Access-Point pattern used by the Waveshare demo — the board serves the control page, your phone joins it.',
     body:`
-      <p>Waveshare’s demo sketch makes the board a <b>Wi-Fi Access Point</b> named <code>ESP32-S3-POE-ETH-8DI-8DO</code>
+      <p>Waveshare’s demo sketch makes the board a <b>Wi-Fi Access Point</b> named <code>ESP32-S3-ETH-8DI-8RO</code>
       (password <code>waveshare</code>). Join it with your phone, open <code>http://192.168.4.1</code>, and you get a web
       page with a big switch per channel.</p>
       <p>The interesting architecture bit: it’s the <b>board</b> that owns the network. No router, no cloud, no internet at all on
@@ -353,7 +352,7 @@ void loop() {
 
 void setup() {
   Serial.begin(115200);
-  WiFi.softAP("ESP32-S3-POE-ETH-8DI-8DO", "waveshare");
+  WiFi.softAP("ESP32-S3-ETH-8DI-8RO", "waveshare");
   Serial.print("AP IP = ");
   Serial.println(WiFi.softAPIP());
   Serial.println("Waiting for clicks on http://192.168.4.1 ...");
@@ -366,30 +365,27 @@ void loop() {
 }`
   },
   {
-    id:'l9', num:9, title:'Ethernet, PoE & fail-safe thinking',
+    id:'l9', num:9, title:'Ethernet & fail-safe thinking',
     sub:'Wires are boring; boring is exactly what an automated cellar needs.',
-    goal:'Appreciate why heavy industrial installs reach for Ethernet + PoE before Wi-Fi, and what isolation has already saved you from.',
+    goal:'Appreciate why heavy industrial installs trust wired Ethernet over Wi-Fi for the control path, and what isolation has already saved you from.',
     body:`
       <p>The <b>W5500</b> chip is a full TCP/IP stack in silicon: the ESP32-S3 feeds it SPI bytes on
-      <code>GPIO13/14/15</code>, chip-select <code>16</code>, interrupt <code>12</code>, reset <code>39</code>, and the W5500
+      <code>GPIO13/14/15</code>, chip-select <code>16</code>, interrupt <code>12</code>, and the W5500
       magically does ARP, DHCP, TCP and an SSL handshake if you ask — while your loop() stays relaxed.</p>
-      <p><b>PoE — power and data in one cable.</b> IEEE 802.3af steals up to ~15 W from a PoE switch, so one cable down from the
-      ceiling powers the whole controller. Industrial cameras, access points and I/O nodes live on exactly the same rule.</p>
       <p>Wi-Fi is usually the <i>quick start</i> link; Ethernet is the <b>critical</b> one. Rules of thumb:</p>
       <ul>
         <li>If losing the link must not stop the process, wire it.</li>
         <li>Wi-Fi (with the SMA antenna on!) for dashboards and commissioning, Ethernet for the control path.</li>
-        <li>10/100 Mbps from the W5500 is far more than enough — an 8DO controller sends bytes, not movies.</li>
+        <li>10/100 Mbps from the W5500 is far more than enough — an 8-relay controller sends bytes, not movies.</li>
       </ul>
-      <p><b>Isolation everywhere:</b> optocouplers on every DI and DO, isolated DC-DC between the field side and the logic side,
-      TVS diodes on RS485 and CAN. A wire chomped by a forklift trips one channel; the ESP32 keeps running. That is the whole
-      reason this box costs $40 and exists at all.</p>
+      <p><b>Isolation everywhere:</b> optocouplers on every DI and on every relay coil, an isolated DC-DC between the
+      field side and the logic side, TVS diodes on RS485. A wire chomped by a forklift trips one channel; the ESP32 keeps
+      running. That is the whole reason this box costs $40 and exists at all.</p>
     `,
     code:`void setup() {
   Serial.begin(115200);
-  Serial.println("[W5500] SPI on GPIO13/14/15, CS=16, INT=12, RST=39");
+  Serial.println("[W5500] SPI on GPIO13/14/15, CS=16, INT=12");
   Serial.println("[W5500] link up  ->  asking DHCP ...");
-  Serial.println("[PoE] IEEE 802.3af: drawing ~4 W, class 0 (15.4 W shared)");
 }
 
 void loop() {
@@ -403,11 +399,11 @@ void loop() {
     goal:'Combine everything: DI as sensors, EXIO as actuators, BOOT as e-stop, buzzer + RGB as the status language, with sane behaviour under fault.',
     body:`
       <p>Time to be a small integrator. The rig: boxes enter on a conveyor; a slide has a <b>detect sensor</b> wired to
-      <b>DI1</b>; a gate actuator (say, a solenoid on <b>DO1</b>) kicks when a box is in place; a <b>pusher</b> on
-      <b>DO2</b> clears the lane when empty. Hardware rules:</p>
+      <b>DI1</b>; a gate actuator (say, a 24 V solenoid valve wired through the <b>RO1</b> contact) kicks when a box is in
+      place; a <b>pusher</b> on <b>RO2</b> clears the lane when empty. Hardware rules:</p>
       <ul>
-        <li><b>The BOOT button doubles as the emergency stop.</b>_pressed (GPIO0 low) → everything off instantly, buzzer blares.</li>
-        <li>Only when a box is actually detected does <b>DO1</b> fire. No box, no motor — saves power and avoids mis-fires.</li>
+        <li><b>The BOOT button doubles as the emergency stop.</b>_pressed (GPIO0 low) → everything off instantly, buzzer blares, all relays drop out.</li>
+        <li>Only when a box is actually detected does <b>RO1</b> fire. No box, no motor — saves power and avoids mis-fires.</li>
         <li>The conveyor is “interlocked” with the e-stop: while e-stop is down, no sketch code can wake it up. You must release and restart.</li>
         <li>The RGB beacon mirrors the fault state: <b>amber</b> = running, <b>red</b> = e-stop latched.</li>
       </ul>
@@ -451,7 +447,7 @@ void loop() {
   {
     id:'l11', num:11, title:'IoT gateway: MQTT e-stop + LED',
     sub:'The box learns to talk: publish the e-stop state, subscribe to dashboard commands.',
-    goal:'Understand the classic IoT gateway pattern — MQTT broker, retained state, last-will — and wire an NC e-stop (DI1) plus a dashboard-driven LED (DO1).',
+    goal:'Understand the classic IoT gateway pattern — MQTT broker, retained state, last-will — and wire an NC e-stop (DI1) plus a dashboard-driven lamp on relay RO1.',
     body:`
       <p>Lesson 10 kept everything inside the box. Real IoT wants the box to <b>publish</b> its state and
       <b>listen</b> for commands. The standard industrial dialect is <span class="term">MQTT</span>: a tiny
@@ -462,13 +458,13 @@ void loop() {
         <li><code>plant/line1/estop</code> — the gateway <b>publishes</b> <code>1</code>/<code>0</code> here,
         <i>retained</i>: a dashboard that opens late instantly sees the last state, no waiting for the next event.</li>
         <li><code>plant/line1/led/set</code> — a dashboard <b>publishes</b> <code>on</code>/<code>off</code>/<code>toggle</code>;
-        the gateway is <b>subscribed</b> and drives DO1. While the e-stop is latched the gateway ignores LED commands.</li>
+        the gateway is <b>subscribed</b> and drives RO1. While the e-stop is latched the gateway ignores lamp commands.</li>
         <li><code>plant/line1/status</code> — armed with a <span class="term">last-will</span>: if the gateway dies, the
         broker posts <code>"offline"</code> on its behalf. A silent gateway is a fault you can <em>see</em>.</li>
       </ul>
       <p>The wiring stays humble: a <b>normally-closed e-stop button</b> shorts DI1 (GPIO4) to ground — pressed = LOW,
-      released = HIGH. A broken wire reads like “pressed”, industry’s favourite fail-safe. The <b>LED lamp</b> lives on
-      DO1 (+24 V → lamp → DO terminal), sunk by the Darlington like every other load.</p>
+      released = HIGH. A broken wire reads like “pressed”, industry’s favourite fail-safe. The <b>LED lamp</b> is switched
+      by relay <b>RO1</b>: +24 V → lamp → NO terminal, contact closing through COM — no polarity to worry about.</p>
       <p>Run the sketch, then flip <b>SW1</b> while it runs — each change is published and the status beacon answers.
       Wait a few seconds once subscribed: a clicky “operator” starts pushing LED commands from the dashboard.</p>
       <div class="warnbox">MQTT <em>reports</em> and <em>monitors</em> the e-stop — it does not implement it. The real

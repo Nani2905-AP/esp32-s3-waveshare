@@ -1,5 +1,5 @@
 /* ============================================================
-   ESP32-S3-Waveshare — Learn the Waveshare ESP32-S3-POE-ETH-8DI-8DO
+   ESP32-S3-Waveshare — Learn the Waveshare ESP32-S3-ETH-8DI-8RO
    ============================================================ */
 :root{
   --bg:      #0c0f15;
@@ -179,11 +179,9 @@ code,kbd,pre{font-family:"Cascadia Code","JetBrains Mono",Consolas,monospace}
 .led-txd.on{fill:#44e07a;filter:drop-shadow(0 0 4px #44e07a)}
 .led-rxd{fill:#14203f}
 .led-rxd.on{fill:#3f7dff;filter:drop-shadow(0 0 4px #3f7dff)}
-.led-can{fill:#241d2c}
-.led-can.on{fill:#c763ff;filter:drop-shadow(0 0 4px #c763ff)}
 .buzzer-hole{fill:var(--svg-hole);stroke:var(--svg-term-line);stroke-width:1}
 .opto{fill:#22181f;stroke:#5a3a4a;stroke-width:1}
-.relay{fill:#20142a;stroke:#6b3d8f;stroke-width:1}
+.relay-body{fill:#2f52c8;stroke:#1c3a8a;stroke-width:1.4;cursor:pointer}
 .trace{stroke:var(--svg-trace);stroke-width:1.6;fill:none;opacity:.55}
 .flow{fill:none;stroke-width:2.4;stroke-linecap:round;opacity:0;transition:opacity .3s}
 .flow.on{opacity:1;stroke-dasharray:6 7;animation:flowmove 1s linear infinite}

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ESP32-S3-Waveshare</title>
-<meta name="description" content="Learn industrial automation on an interactive Waveshare ESP32-S3-POE-ETH-8DI-8DO: digital inputs, digital outputs, RS485, CAN, Wi-Fi and PoE — with runnable sketch simulations.">
+<meta name="description" content="Learn industrial automation on an interactive Waveshare ESP32-S3-ETH-8DI-8RO: 8 optocoupled digital inputs, 8 relays with COM/NO/NC contacts, RS485 and Ethernet — with runnable sketch simulations.">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -51,6 +51,7 @@
       <div class="panel-head">
         <h2>The board</h2>
         <span class="hint">Hover a part to inspect · click to open its reference</span>
+        <button class="theme-btn" id="case-btn" title="Inspector mode — lift the cover (3D view)">🧰</button>
       </div>
       <div class="board-scroll">
         <div id="frame-container"></div><!-- SVG injected here -->
@@ -59,9 +60,8 @@
         <div class="bench-block" id="bench-di">
           <h3>Inputs <small>toggle a wire to test</small></h3>
           <div class="switch-row" id="di-switches"></div>
-        </div>
-        <div class="bench-block" id="bench-do">
-          <h3>Outputs <small>loads on channels DO1–DO8</small></h3>
+        </div>        <div class="bench-block" id="bench-do">
+          <h3>Relay outputs <small>loads on RO1–RO8 contacts · COM/NO</small></h3>
           <div class="lamp-row" id="do-lamps"></div>
         </div>
       </div>

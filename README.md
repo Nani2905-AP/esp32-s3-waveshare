@@ -4,11 +4,13 @@ Two related projects living side by side:
 
 ## 🖥️ `learn-esp32-s3/` — interactive learning site
 "ESP32-S3-Waveshare" — an interactive trainer for the **Waveshare
-ESP32-S3-POE-ETH-8DI-8DO** industrial controller:
+ESP32-S3-ETH-8DI-8RO** industrial relay controller (reference 3D model:
+grabcad.com/library/waveshare-esp32-s3-eth-8di-8ro-1):
 
 - A real-time **3D board** (three.js, webgl) you can orbit, hover and click —
-  hover any part for its reference, click DI/DO terminals, BOOT, buzzer or the
-  RGB pixel to drive the simulator
+  hover any part for its reference, click DI terminals, relay cubes, BOOT,
+  RESET, buzzer or the RGB pixel to drive the simulator. Relays do a small
+  physical **click-lift animation** when their coil energizes
 - **11 lessons** from "read your first input" to a full **MQTT e-stop IoT
   gateway** capstone, each with a runnable sketch simulation
 - An **I/O bench** + control deck that share state with lesson sketches

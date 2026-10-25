@@ -1,7 +1,9 @@
 /* ============================================================
    ESP32-S3-Waveshare — interactive learning board for the
-   Waveshare ESP32-S3-POE-ETH-8DI-8DO
-   (GPIO numbers follow the official Waveshare documentation)
+   Waveshare ESP32-S3-ETH-8DI-8RO (8 relays + 8 isolated inputs)
+   (GPIO numbers follow the official Waveshare documentation;
+    RO channels are internally keyed as "DO" + index, then
+    presented as RO1–RO8 everywhere in the UI)
    ============================================================ */
 'use strict';
 
@@ -23,11 +25,11 @@ function svgEl(tag, attrs, parent){
 /* ================= runtime state ================= */
 const state = {
   di:    [false,false,false,false,false,false,false,false],  // wire closed (= LOW, active)
-  do:    [false,false,false,false,false,false,false,false],  // channel conducting
+  do:    [false,false,false,false,false,false,false,false],  // relay energized (COM→NO closed)
   boot:  false,
   buzzer:false,
   rgbColor: null,
-  leds:  {pwr:true, txd:false, rxd:false, can:false},
+  leds:  {pwr:true, txd:false, rxd:false},
   currentLesson: null,
   done:  new Set(JSON.parse(localStorage.getItem('iodesk.done') || '[]')),
   runToken: 0,
@@ -75,11 +77,19 @@ flashLED._t = {};
 function setDI(i, closed){ state.di[i] = closed; syncAll(); }
 function setDO(i, on){ state.do[i] = on; syncAll(); }
 function toggleDI(i){ setDI(i, !state.di[i]); logEvent('SW' + (i+1) + ' (DI' + (i+1) + ', GPIO' + (i+4) + ') ' + (state.di[i] ? 'CLOSED → active LOW' : 'OPEN → idle HIGH')); }
-function toggleDO(i){ setDO(i, !state.do[i]); logEvent('CH' + (i+1) + ' (DO' + (i+1) + ', EXIO' + (i+1) + ') ' + (state.do[i] ? 'ON — lamp L' + (i+1) + ' lights' : 'OFF — lamp L' + (i+1) + ' out')); }
+function toggleDO(i){ setDO(i, !state.do[i]); logEvent('RO' + (i+1) + ' (EXIO' + (i+1) + ') ' + (state.do[i] ? 'CLICK — coil energized, contact COM→NO closed, lamp L' + (i+1) + ' lights' : 'released — contact back on COM→NC, lamp L' + (i+1) + ' out')); }
 function toggleBoot(){
   state.boot = !state.boot;
   syncBoard();
   logEvent('BOOT button ' + (state.boot ? 'PRESSED (GPIO0 = LOW)' : 'released (GPIO0 = HIGH)'));
+}
+function pressReset(){
+  for(let i = 0; i < 8; i++) state.do[i] = false;
+  state.buzzer = false;
+  setRGB(null);
+  syncAll();
+  beep(90);
+  logEvent('RESET (EN) — chip rebooted, relays dropped to power-on default (all off)');
 }
 function setBuzzer(on, ms){
   state.buzzer = on;
@@ -129,7 +139,7 @@ function chaserOnce(){
 }
 function allDO(on){
   for(let i = 0; i < 8; i++) setDO(i, on);
-  logEvent('all channels ' + (on ? 'ON (frame 06 05 00 FF FF ...)' : 'OFF (frame 06 05 00 FF 00 ...)'));
+  logEvent('all relays ' + (on ? 'ON (frame 06 05 00 FF FF ...)' : 'OFF (frame 06 05 00 FF 00 ...)'));
 }
 
 /* ================= board SVG ================= */
@@ -143,7 +153,7 @@ function drawBoard(container){
   svgEl('rect', {x:8,y:8,width:964,height:584,rx:20,class:'case'}, S);
   svgEl('rect', {x:24,y:24,width:932,height:552,rx:12,class:'pcb'}, S);
   svgEl('text', {x:38,y:44,class:'al-label',text:'ISOLATED FIELD SIDE — logic side left harmless'}, S);
-  svgEl('text', {x:492,y:44,class:'al-label','text-anchor':'middle',text:'ESP32-S3-POE-ETH-8DI-8DO · DIN-rail 175 × 90 mm'}, S);
+  svgEl('text', {x:492,y:44,class:'al-label','text-anchor':'middle',text:'ESP32-S3-ETH-8DI-8RO · DIN-rail 175 × 90 mm'}, S);
 
   ['M 136 100 C 180 100 190 150 240 170',
    'M 136 180 C 170 180 190 175 240 185',
@@ -182,14 +192,7 @@ function drawBoard(container){
   svgEl('rect', {x:50,y:154,width:84,height:58,rx:6,class:'terminal-block'}, g);
   terminal(g, 74, 184, 'A+', 74, 210);
   terminal(g, 110, 184, 'B−', 110, 210);
-  T(g, 92, 144, 'RS485  ·  17/18/21', 9);
-
-  /* --- CAN --- */
-  g = partGroup('can', 44, 234, 96, 74);
-  svgEl('rect', {x:50,y:240,width:84,height:58,rx:6,class:'terminal-block'}, g);
-  terminal(g, 74, 270, 'H', 74, 296);
-  terminal(g, 110, 270, 'L', 110, 296);
-  T(g, 92, 230, 'CAN  ·  GPIO2/3', 9);
+  T(g, 92, 144, 'RS485  ·  17/18', 9);
 
   /* --- MCU module --- */
   g = partGroup('mcu', 236, 112, 240, 148);
@@ -218,49 +221,55 @@ function drawBoard(container){
   svgEl('rect', {x:392,y:350,width:92,height:26,rx:6,class:'opto'}, g);
   T(g, 438, 367, 'OPTOCOUPLERS', 8);
   svgEl('rect', {x:496,y:350,width:92,height:26,rx:6,class:'opto'}, g);
-  T(g, 542, 367, 'DARLINGTON', 8);
+  T(g, 542, 367, 'RELAY DRIVERS', 7);
   T(g, 490, 344, 'ISOLATION BARRIER', 10);
   T(g, 490, 398, 'field voltages stop right here', 8.5);
 
-  /* --- Ethernet + PoE + USB-C + TF --- */
+  /* --- Ethernet + USB-C + TF --- */
   g = partGroup('eth', 812, 54, 118, 96);
   svgEl('rect', {x:818,y:60,width:106,height:80,rx:7,class:'rj'}, g);
   for(let r = 0; r < 2; r++) for(let c = 0; c < 4; c++)
     svgEl('rect', {x:828+c*22, y:74+r*26, width:16, height:12, rx:2, fill:'#0d131c'}, g);
-  T(g, 871, 132, 'W5500 ETH · 12-16,39', 9);
+  T(g, 871, 132, 'W5500 ETH · 12-16', 9);
 
-  g = partGroup('poe', 812, 158, 118, 28);
-  svgEl('rect', {x:818,y:163,width:106,height:18,rx:4,class:'chip'}, g);
-  T(g, 871, 177, 'PoE · IEEE 802.3af', 9);
+  g = partGroup('usbc', 812, 158, 118, 26);
+  svgEl('rect', {x:818,y:163,width:106,height:17,rx:6,class:'usbc'}, g);
+  T(g, 871, 177, 'USB-C 5 V / flash', 9);
 
-  g = partGroup('usbc', 812, 194, 118, 26);
-  svgEl('rect', {x:818,y:198,width:106,height:17,rx:6,class:'usbc'}, g);
-  T(g, 871, 212, 'USB-C 5 V / flash', 9);
+  g = partGroup('tf', 812, 194, 118, 26);
+  svgEl('rect', {x:818,y:198,width:106,height:18,rx:4,class:'tf'}, g);
+  T(g, 871, 212, 'TF card · 45/47/48', 9);
 
-  g = partGroup('tf', 812, 228, 118, 26);
-  svgEl('rect', {x:818,y:232,width:106,height:18,rx:4,class:'tf'}, g);
-  T(g, 871, 246, 'TF card · 45/47/48', 9);
+  /* --- GPIO pin header (expansion) --- */
+  g = partGroup('header', 812, 226, 118, 26);
+  svgEl('rect', {x:818,y:230,width:106,height:18,rx:4,class:'chip'}, g);
+  T(g, 871, 244, 'PIN HEADER', 9);
 
   /* --- RGB pixel --- */
-  g = partGroup('rgb', 812, 262, 40, 42);
-  svgEl('rect', {x:818,y:268,width:28,height:28,rx:5,id:'rgb-sq',class:'rgb'}, g);
-  T(g, 832, 306, 'RGB', 9);
+  g = partGroup('rgb', 812, 262, 36, 42);
+  svgEl('rect', {x:818,y:268,width:26,height:28,rx:5,id:'rgb-sq',class:'rgb'}, g);
+  T(g, 831, 306, 'RGB', 9);
 
   /* --- buzzer --- */
-  g = partGroup('buzzer', 858, 262, 34, 42);
-  svgEl('circle', {cx:875,cy:282,r:13,id:'buzzer-hole',class:'buzzer-hole'}, g);
-  svgEl('circle', {cx:875,cy:282,r:2.6,class:'screw'}, g);
-  T(g, 875, 306, 'BUZ', 9);
+  g = partGroup('buzzer', 852, 262, 32, 42);
+  svgEl('circle', {cx:868,cy:282,r:12,id:'buzzer-hole',class:'buzzer-hole'}, g);
+  svgEl('circle', {cx:868,cy:282,r:2.6,class:'screw'}, g);
+  T(g, 868, 306, 'BUZ', 9);
 
   /* --- BOOT button --- */
-  g = partGroup('boot', 896, 262, 34, 42);
-  svgEl('circle', {cx:913,cy:282,r:12,id:'boot-btn',class:'buzzer-hole'}, g);
-  T(g, 913, 306, 'BOOT', 8);
+  g = partGroup('boot', 886, 262, 30, 42);
+  svgEl('circle', {cx:901,cy:282,r:11,id:'boot-btn',class:'buzzer-hole'}, g);
+  T(g, 901, 306, 'BOOT', 8);
+
+  /* --- RESET button --- */
+  g = partGroup('reset', 918, 262, 30, 42);
+  svgEl('circle', {cx:933,cy:282,r:11,id:'reset-btn',class:'buzzer-hole'}, g);
+  T(g, 933, 306, 'RST', 8);
 
   /* --- indicator LED stack --- */
   g = partGroup('leds', 812, 318, 118, 54);
-  [['pwr','PWR'],['txd','TXD'],['rxd','RXD'],['can','CAN']].forEach((d, i) => {
-    const cx = 828 + i*26;
+  [['pwr','PWR'],['txd','TXD'],['rxd','RXD']].forEach((d, i) => {
+    const cx = 828 + i*30;
     svgEl('circle', {cx, cy:340, r:6, id:'led-'+d[0], class:'led-'+d[0]}, g);
     svgEl('text', {x:cx, y:360, class:'al-label','text-anchor':'middle',text:d[1]}, g);
   });
@@ -285,18 +294,19 @@ function drawBoard(container){
   }
   T(g, 256, 444, 'DIGITAL INPUTS · 5–36 V · OPTO ISOLATED · NPN / PNP', 9);
 
-  /* --- DO strip --- */
-  g = partGroup('do', 640, 450, 300, 108);
+  /* --- relay strip --- */
+  g = partGroup('ro', 640, 450, 300, 108);
   svgEl('rect', {x:646,y:456,width:288,height:64,rx:6,class:'terminal-block'}, g);
   for(let i = 0; i < 8; i++){
     const cx = 664 + i*37.5;
-    svgEl('circle', {cx, cy:492, r:5.2, class:'lamp', id:'do-lamp-'+i, 'data-pin':'DO'+(i+1)}, g);
+    svgEl('rect', {x:cx-13.5, y:463, width:27, height:38, rx:4, class:'relay-body', 'data-pin':'DO'+(i+1)}, g);
+    svgEl('circle', {cx, cy:480, r:5.2, class:'lamp', id:'do-lamp-'+i, 'data-pin':'DO'+(i+1)}, g);
     svgEl('circle', {cx, cy:506, r:10.6, class:'terminal-circle', 'data-pin':'DO'+(i+1)}, g);
     svgEl('circle', {cx, cy:506, r:3.8, class:'screw'}, g);
-    svgEl('text', {x:cx, y:532, class:'al-label','text-anchor':'middle',text:'DO'+(i+1)}, g);
+    svgEl('text', {x:cx, y:532, class:'al-label','text-anchor':'middle',text:'RO'+(i+1)}, g);
     svgEl('text', {x:cx, y:541, class:'al-label','text-anchor':'middle','font-size':7,text:'EXIO'+(i+1)}, g);
   }
-  T(g, 790, 444, 'DIGITAL OUTPUTS · SINK 500 mA · FLYBACK INSIDE', 9);
+  T(g, 790, 444, 'RELAYS · COM / NC / NO · ≤10 A 250 VAC / 30 VDC', 8.5);
 
   S.addEventListener('click', e => {
     const pin = e.target.closest('[data-pin]');
@@ -312,6 +322,7 @@ function drawBoard(container){
     if(id === 'boot') toggleBoot();
     else if(id === 'buzzer'){ beep(150); logEvent('buzzer BEEP'); }
     else if(id === 'rgb') cycleRGB();
+    else if(id === 'reset') pressReset();
   });
   return S;
 }
@@ -343,7 +354,7 @@ function syncBoard(){
     bt.style.fill = state.boot ? '#c8a15a' : '#0f141d';
     bt.style.filter = state.boot ? 'drop-shadow(0 0 6px #ffb45488)' : '';
   }
-  ['pwr','txd','rxd','can'].forEach(k => {
+  ['pwr','txd','rxd'].forEach(k => {
     const led = boardSVG.querySelector('#led-'+k);
     if(led) led.classList.toggle('on', state.leds[k]);
   });
@@ -361,8 +372,8 @@ function buildBench(){
 
     const lp = document.createElement('button');
     lp.className = 'mini-lamp';
-    lp.innerHTML = '<span class="dot"></span><span>DO'+(i+1)+'</span>';
-    lp.title = 'EXIO' + (i+1) + ' — click to toggle this channel';
+    lp.innerHTML = '<span class="dot"></span><span>RO'+(i+1)+'</span>';
+    lp.title = 'EXIO' + (i+1) + ' — click to energize this relay';
     lp.onclick = () => toggleDO(i);
     doRow.appendChild(lp);
   }
@@ -377,7 +388,7 @@ function syncAll(){ syncBoard(); syncBench(); }
 /* ================= syntax highlighter ================= */
 function highlight(src){
   const s = esc(src);
-  const RX = /(\/\/[^\n]*)|("(?:[^"\\]|\\.)*")|\b(void|int|long|short|float|double|bool|boolean|byte|char|const|unsigned|static|volatile|if|else|for|while|do|return|switch|case|break|continue|true|false|sizeof)\b|\b(0x[0-9A-Fa-f]+|\d+\.?\d*)\b|\b(GPIO\d+|EXIO\d+|CH\d|DI\d|DO\d|SW\d|HIGH|LOW|INPUT|OUTPUT|INPUT_PULLUP|Serial|WiFi|RS485|server|strip|NEO_GRB|NEO_KHZ800|WebServer|HardwareSerial|Adafruit_NeoPixel|Buzzer_PWM)\b|\b([A-Za-z_]\w*)(?=\()/g;
+  const RX = /(\/\/[^\n]*)|("(?:[^"\\]|\\.)*")|\b(void|int|long|short|float|double|bool|boolean|byte|char|const|unsigned|static|volatile|if|else|for|while|do|return|switch|case|break|continue|true|false|sizeof)\b|\b(0x[0-9A-Fa-f]+|\d+\.?\d*)\b|\b(GPIO\d+|EXIO\d+|CH\d|RO\d|DI\d|DO\d|SW\d|HIGH|LOW|INPUT|OUTPUT|INPUT_PULLUP|Serial|WiFi|RS485|server|strip|NEO_GRB|NEO_KHZ800|WebServer|HardwareSerial|Adafruit_NeoPixel|Buzzer_PWM)\b|\b([A-Za-z_]\w*)(?=\()/g;
   return s.replace(RX, (m, com, str, kw, num, pin, fn) => {
     if(com) return '<span class="tok-com">' + com + '</span>';
     if(str) return '<span class="tok-str">' + str + '</span>';
@@ -497,7 +508,7 @@ function buildRuntime(consoleEl){
     beep(ms){ beep(ms); },
     wifiAP(){
       flashLED('rxd', 400);
-      printLine('Wi-Fi AP up — SSID "ESP32-S3-POE-ETH-8DI-8DO", password "waveshare"');
+      printLine('Wi-Fi AP up — SSID "ESP32-S3-ETH-8DI-8RO", password "waveshare"');
     },
     wifiSTA(ssid){
       wifiAddr = '192.168.1.42';
@@ -560,7 +571,7 @@ function buildRuntime(consoleEl){
             printLine('RX ' + c._sub + ' = "' + cmd + '" → gateway: IGNORED, e-stop is latched');
             return;
           }
-          printLine('RX ' + c._sub + ' = "' + cmd + '" → gateway applies it to DO1');
+          printLine('RX ' + c._sub + ' = "' + cmd + '" → gateway applies it to relay RO1');
           if(cmd === 'on') setDO(0, true);
           else if(cmd === 'off') setDO(0, false);
           else toggleDO(0);
@@ -628,7 +639,7 @@ async function runSketch(src, consoleEl){
   consoleEl.closest('.console').querySelector('.console-dot').classList.add('live');
   consoleEl.closest('.console').querySelector('.console-status').textContent = 'Running';
 
-  rt.println('ESP32-S3 boot ... Waveshare 8DI/8DO (simulated)');
+  rt.println('ESP32-S3 boot ... Waveshare 8DI/8RO (8 relays, simulated)');
   rt.println('');
 
   let prog = null;
@@ -721,17 +732,17 @@ function renderInto(panel, name){
 function homeHTML(){
   const cards = [
     ['🧭','Lessons','11 short lessons — from reading one input to a full MQTT e-stop gateway.'],
-    ['🎛','I/O bench','Flip the input switches and light the output lamps directly under the board.'],
-    ['💾','Pinout','Every GPIO on the board: digital I/O, W5500, RS485, CAN, RTC, TF.'],
+    ['🎛','I/O bench','Flip the input switches and click the relays directly under the board.'],
+    ['💾','Pinout','Every GPIO on the board: digital inputs, relays, W5500, RS485, RTC, TF.'],
     ['▶','Runnable sketches','Every lesson has a sketch — run it and watch the simulated hardware react.'],
   ];
   return `
   <div class="view is-active">
     <div class="hero">
-      <h2>An interactive desk for the <em>ESP32-S3-POE-ETH-8DI-8DO</em></h2>
-      <p class="lead">Industrial 8-channel digital I/O — optocoupled in, Darlington-sunk out, PoE fed,
-      RS485/CAN staffed. Learn it the fun way: hover the board to inspect parts, tick a switch and watch
-      the lamp respond, and run every lesson sketch against the simulated serial monitor.</p>
+      <h2>An interactive desk for the <em>ESP32-S3-ETH-8DI-8RO</em></h2>
+      <p class="lead">Industrial 8-in / 8-relay controller — optocoupled inputs in, electromechanical relays out
+      (COM/NC/NO, ≤10 A 250 VAC), hard-wired Ethernet, RS485. Learn it the fun way: hover the 3D board to inspect
+      parts, tick a switch and watch the relay click, and run every lesson sketch against the simulated serial monitor.</p>
     </div>
     <div class="feature-cards">
       ${cards.map(c => `<div class="fcard"><div class="num">${c[0]}</div><h4>${c[1]}</h4><p>${c[2]}</p></div>`).join('')}
@@ -741,13 +752,13 @@ function homeHTML(){
       <ol class="step-list">
         <li><span class="n">1</span><span><b>Meet the box.</b> Hover each block on the board: every part tells you what it does and which GPIO it lives on.</span></li>
         <li><span class="n">2</span><span><b>Lesson 2 — read your first input.</b> Run the sketch in the lesson card; flip SW1 and watch the serial monitor report DI1 going active-LOW.</span></li>
-        <li><span class="n">3</span><span><b>Lesson 3 — linkage.</b> DI closed → DO conducts → L1 glows. This is how industrial logic bridges sensors to action.</span></li>
+        <li><span class="n">3</span><span><b>Lesson 3 — linkage.</b> DI closed → relay RO1 clicks → L1 glows. This is how industrial logic bridges sensors to action.</span></li>
         <li><span class="n">4</span><span><b>Lesson 10 — capstone.</b> Build a tiny QC gate with an e-stop, buzzer and status beacon, entirely in one sketch.</span></li>
       </ol>
     </div>
     <div class="footer-note">
       Builds on the official Waveshare documentation. GPIO mapping, bus speeds and demo behaviours follow
-      <a href="https://docs.waveshare.com/ESP32-S3-POE-ETH-8DI-8DO" target="_blank" rel="noopener">docs.waveshare.com</a>.
+      <a href="https://www.waveshare.com/wiki/ESP32-S3-ETH-8DI-8RO" target="_blank" rel="noopener">waveshare.com/wiki</a>.
       This is an independent, unofficial learning aid (original design, no official assets).
     </div>
   </div>`;
@@ -865,8 +876,9 @@ function simulatorHTML(){
       <span class="hint">drive the simulated I/O by hand</span></div>
     <p style="color:var(--muted);font-size:.86rem;line-height:1.6">
       Everything here manipulates the same I/O state the lesson sketches see. Click SW buttons to close input
-      wires (active-low), lamps to toggle output channels, or drive them in bulk below. Press <b>BOOT</b> like a
-      person: pressed = GPIO0 low. The buzzer and the RGB pixel on the board follow instantly.</p>
+      wires (active-low), relay labels to energize the channels, or drive them in bulk below. Press <b>BOOT</b> like a
+      person: pressed = GPIO0 low. The buzzer and the RGB pixel on the board follow instantly — and on the 3D board
+      each relay does a little physical click as its coil engages.</p>
     <div class="sim-controls">
       <button class="sim-btn" id="sim-allon">⚡ all ON</button>
       <button class="sim-btn" id="sim-alloff">⏻ all OFF</button>
@@ -881,7 +893,7 @@ function simulatorHTML(){
       </div>
     </div>
     <div class="footer-note">The same virtual hardware powers the lesson sketches — run lesson 4 (pattern chaser)
-    then switch to this deck and watch the lamps keep burning along.</div>
+    then switch to this deck and watch the relays keep clicking along.</div>
   </div>`;
 }
 
@@ -958,16 +970,27 @@ function init(){
       },
       onPick: id => {
         if(id === 'boot'){ toggleBoot(); return; }
+        if(id === 'reset'){ pressReset(); return; }
         if(id === 'buzzer'){ beep(150); logEvent('buzzer BEEP'); return; }
         if(id === 'rgb'){ cycleRGB(); return; }
         if(id && id.startsWith('DI')) toggleDI(Number(id.slice(2)) - 1);
-        else if(id && id.startsWith('DO')) toggleDO(Number(id.slice(2)) - 1);
+        else if(id && id.startsWith('RO')) toggleDO(Number(id.slice(2)) - 1);   // relay picks (3D)
+        else if(id && id.startsWith('DO')) toggleDO(Number(id.slice(2)) - 1);   // legacy SVG keys
       },
     });
   }catch(e){
     board3d = null;   // no WebGL — fall back to the 2D SVG board
   }
   if(!board3d) boardSVG = drawBoard($('#frame-container'));
+  const caseBtn = $('#case-btn');           // inspector mode 🧰
+  if(caseBtn) caseBtn.onclick = () => {
+    if(!board3d || !board3d.setCover){ logEvent('inspector mode needs the 3D view (WebGL)'); return; }
+    state.coverOpen = !state.coverOpen;
+    board3d.setCover(state.coverOpen);
+    caseBtn.setAttribute('aria-pressed', state.coverOpen ? 'true' : 'false');
+    logEvent(state.coverOpen ? 'inspector mode — cover lifted, interior exposed'
+                             : 'inspector mode — cover closed again');
+  };
   buildBench();
   attachNav();
   showView('home');

@@ -1,11 +1,29 @@
 /* ============================================================
-   board3d.js — the ESP32-S3-Waveshare board as a real 3D model (three.js)
-   Same parts, same layout and same state wiring as the 2D SVG:
-   every coordinate below is the SVG viewBox mapped to millimetres
-     x_mm = (px / 980 - 0.5) * 175
-     z_mm = (py / 600 - 0.5) * 90
-   LiveBehaves strictly from the app's `state` via hooks.readState(),
-   so lesson sketches, the bench and the control deck all light up here.
+   board3d.js — the ESP32-S3-ETH-8DI-8RO gateway as the real
+   Waveshare appliance, in three.js.
+   Reference photos: waveshare.com/wiki/ESP32-S3-POE-ETH-8DI-8DO
+   (front + rear product shots) — adapted to the 8RO relay spec.
+
+   Anatomy, matching the photos:
+     · two-piece black ABS case — a shallow base with four raised
+       corner posts and a lifted-off upper shell
+     · the shell's top face is the silkscreen panel: rear PCB strip
+       first (RJ45 · USB-C · SMA · RS485 · LEDs…), then a row of
+       green service badges, the WAVESHARE title block, the
+       Digital Outputs / Digital Inputs group headers with
+       'COM GND 1–8' legends and printed indicator circles
+     · two long green pluggable strips + a small 7–36 V block
+       protruding under the shell's front lip, one screw per
+       socket (RO: COM GND 1–8 · DI: COM GND 1–8 · 7–36 V block)
+     · orange rubber feet underneath, four shell screws on top
+     · inspector mode: the shell lifts up and slides back,
+       revealing relays, optocouplers, the WROOM module and more
+
+   Interaction contract is unchanged: raycastable parts report the
+   same pick keys (DI1–DI8 / RO1–RO8 / boot / rgb / buzzer / reset)
+   and info ids (power / rs485 / eth / usbc / header / rgb / leds /
+   buzzer / boot / reset / mcu / rtc / iso / sma) as before, and
+   the model animates strictly from the app's `state`.
    ============================================================ */
 'use strict';
 
@@ -17,21 +35,21 @@ function createBoard3D(container, hooks){
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputEncoding = T.sRGBEncoding;
   renderer.toneMapping = T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.08;
   container.appendChild(renderer.domElement);
   renderer.domElement.style.touchAction = 'none';
 
   const scene  = new T.Scene();
   scene.background = new T.Color(0x0c121b);
-  scene.fog = new T.Fog(0x0c121b, 320, 900);
+  scene.fog = new T.Fog(0x0c121b, 340, 950);
 
   const camera = new T.PerspectiveCamera(38, 1, 1, 2000);
 
   /* orbit: yaw/pitch/dist with damping (tiny custom controls) */
-  const sph  = { r: 230, phi: deg(55), theta: deg(-32) };
-  sph._r = sph.r; sph._phi = sph.phi; sph._theta = sph.theta;
-  const TARGET = new T.Vector3(0, 2, 6);
   function deg(d){ return d * Math.PI / 180; }
+  const sph  = { r: 255, phi: deg(54), theta: deg(-22) };
+  sph._r = sph.r; sph._phi = sph.phi; sph._theta = sph.theta;
+  const TARGET = new T.Vector3(0, 6, 0);
 
   function updateCamera(){
     sph.phi    += (sph._phi    - sph.phi)    * 0.14;
@@ -53,19 +71,19 @@ function createBoard3D(container, hooks){
     const bg = light ? 0xe3e9f2 : 0x0c121b;
     scene.background.set(bg);
     scene.fog.color.set(bg);
-    hemi.intensity = light ? 0.95 : 0.62;
-    sun.intensity  = light ? 1.0  : 0.8;
-    warm.intensity = light ? 0.0  : 0.18;
-    fill.intensity = light ? 0.15 : 0.25;
+    hemi.intensity = light ? 0.95 : 0.44;
+    sun.intensity  = light ? 1.0  : 0.75;
+    warm.intensity = light ? 0.0  : 0.15;
+    fill.intensity = light ? 0.15 : 0.2;
   }
 
   /* ================= lights ================= */
-  hemi = new T.HemisphereLight(0x9db2c8, 0x11161d, 0.62);
+  hemi = new T.HemisphereLight(0x9db2c8, 0x11161d, 0.44);
   scene.add(hemi);
   sun = new T.DirectionalLight(0xffffff, 0.8);
   sun.position.set(70, 130, 90);
   scene.add(sun);
-  warm = new T.PointLight(0xffb454, 0.18, 400);
+  warm = new T.PointLight(0xffb454, 0.1, 400);
   warm.position.set(-90, 50, -50);
   scene.add(warm);
   fill = new T.DirectionalLight(0x7fa5ff, 0.25);
@@ -73,250 +91,370 @@ function createBoard3D(container, hooks){
   scene.add(fill);
 
   /* ================= material palette ================= */
+  function std(color, rough, metal){ return new T.MeshStandardMaterial({ color, roughness: rough, metalness: metal }); }
+  function glow(color){
+    return new T.MeshStandardMaterial({ color: 0x11181f, roughness: .4, metalness: 0,
+      emissive: new T.Color(color), emissiveIntensity: 0 });
+  }
   const mat = {
     pcb:      std(0x0a3a2b, .9, .12),
-    plate:    std(0x1a2027, .85, .3),
-    rail:     std(0x5b6672, .55, .8),
+    case:     std(0x10151b, .55, .14),    // ABS housing (near-black industrial)
+    caseDk:   std(0x0c1015, .7, .1),
     block:    std(0x2b3442, .6, .25),
-    dark:     std(0x151b24, .7, .2),
+    green:    std(0x2fa557, .55, .08),    // pluggable screw-terminal green
+    greenDk:  std(0x20713e, .65, .05),
+    dark:     std(0x13181f, .7, .2),
     chip:     std(0x101318, .55, .25),
     gold:     std(0xc9a24a, .35, .95),
     metal:    std(0xaeb9c6, .32, .92),
     silver:   std(0xb7c3d4, .28, .95),
     plastic:  std(0x8f97a5, .55, .1),
     sub:      std(0x17322c, .75, .1),
-    antenna:  new T.LineBasicMaterial({ color: 0xb7c3d4 }),
+    relay:    std(0x2f52c8, .45, .15),    // relay encapsulation blue
+    relayTop: std(0x224096, .5, .1),
+    foot:     std(0xe0562e, .8, .02),     // orange rubber feet
+    printed:  std(0x39424c, .9, .05),     // printed circle on the silk panel
   };
-  function std(color, rough, metal){ return new T.MeshStandardMaterial({ color, roughness: rough, metalness: metal }); }
-  function glow(color){
-    return new T.MeshStandardMaterial({ color: 0x11181f, roughness: .4, metalness: 0,
-      emissive: new T.Color(color), emissiveIntensity: 0 });
-  }
 
-  const lampMats        = { di: [], do: [] };
-  const rgbMat          = glow(0x22d97a);
-  const buzzerMat       = glow(0xffb454);
-  const bootMat         = glow(0xc8a15a);
-  const ledMats         = { pwr: glow(0xff5348), txd: glow(0x44e07a), rxd: glow(0x3f7dff), can: glow(0xb96bff) };
+  /* one glow material per channel, shared between circle / ring / window */
+  const diLamps = [];                      // 8 green circle/ring mats, one per DI channel
+  const roLamps = [];                      // 8 amber circle/window/ring mats, one per RO channel
+  for(let i = 0; i < 8; i++) diLamps.push(glow(0x35d07f));
+  for(let i = 0; i < 8; i++) roLamps.push(glow(0xffa732));
+  const relayCubes = [];   // animated: cube nudges when the coil energizes
+  const rgbMat    = glow(0x22d97a);
+  const buzzerMat = glow(0xffb454);
+  const bootMat   = glow(0xc8a15a);
+  const resetMat  = glow(0xc8a15a);
+  const ledMats   = { pwr: glow(0xff5348), txd: glow(0x44e07a), rxd: glow(0x3f7dff) };
 
   /* ================= helpers ================= */
-  const pickables = [];   // meshes with userData.pick ('DI1'... / 'boot' / 'buzzer' / 'rgb')
-  const informants = [];  // meshes with userData.info ('power' / 'eth' ...)
+  const pickables = [];   // meshes with userData.pick
+  const informants = [];  // meshes with userData.info
 
+  function tag(m, opts){
+    opts = opts || {};
+    (opts.parent || scene).add(m);
+    if(opts.pick){ m.userData.pick = opts.pick; pickables.push(m); }
+    if(opts.info){ m.userData.info = opts.info; informants.push(m); }
+    return m;
+  }
   function box(w, h, d, x, y, z, material, opts){
     const m = new T.Mesh(new T.BoxGeometry(w, h, d), material);
     m.position.set(x, y, z);
     if(opts && opts.rotY) m.rotation.y = opts.rotY;
-    ((opts && opts.parent) || scene).add(m);
-    tag(m, opts);
-    return m;
+    return tag(m, opts);
   }
   function cyl(r, h, x, y, z, material, opts){
     const m = new T.Mesh(new T.CylinderGeometry(r, r, h, 24), material);
     m.position.set(x, y, z);
-    (opts && opts.parent || scene).add(m);
-    tag(m, opts);
-    return m;
-  }
-  function tag(m, opts){
-    if(!opts) return;
-    if(opts.pick){ m.userData.pick = opts.pick; pickables.push(m); }
-    if(opts.info){ m.userData.info = opts.info; informants.push(m); }
+    return tag(m, opts);
   }
 
-  /* SVG pixel coordinates -> board millimetres */
-  const mmX = px => (px / 980 - 0.5) * 175;
-  const mmZ = py => (py / 600 - 0.5) * 90;
-  const SVG_Y = 2.02;   // resting height of flat labels on the PCB top
+  /* ================= printed labels (canvas textures) =================
+     Positions are in device millimetres: x across the 175 mm face,
+     z across its 90 mm depth — the same mapping the SVG board used. */
+  const PX_PER_MM = 9;
 
-  function makeLabel(text, px, py, sizeSvgPx, color){
-    const pxPerMm = 9;
-    const millimetres = sizeSvgPx * 0.1786;             // svg unit scale (980px -> 175mm)
-    const fontMm = Math.max(2.0, millimetres * 1.12);
-    const pad = 3;
+  function makeLabel(text, xmm, zmm, sizeMm, o){
+    o = o || {};
+    const color   = o.color || '#9fb1bd';
+    const weight  = o.weight || 600;
+    const italic  = o.italic ? 'italic ' : '';
+    const fontPx  = Math.max(1.6, sizeMm) * PX_PER_MM;
+    const pad = 2;
     const c = document.createElement('canvas');
-    const ctx = c.getContext('2d');
-    ctx.font = '600 ' + Math.round(fontMm * pxPerMm) + 'px system-ui, sans-serif';
-    const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
-    c.width = w; c.height = Math.ceil(fontMm * pxPerMm) + pad * 2;
-    const ctx2 = c.getContext('2d');
-    ctx2.font = '600 ' + Math.round(fontMm * pxPerMm) + 'px system-ui, sans-serif';
-    ctx2.fillStyle = color || '#9fb1bd';
-    ctx2.textBaseline = 'middle';
-    ctx2.fillText(text, pad, c.height / 2);
+    c.height = Math.ceil(fontPx + pad * 2);
+    let ctx = c.getContext('2d');
+    ctx.font = italic + weight + ' ' + Math.round(fontPx) + 'px system-ui, sans-serif';
+    c.width = Math.ceil(ctx.measureText(text).width) + pad * 2;
+    ctx = c.getContext('2d');
+    ctx.font = italic + weight + ' ' + Math.round(fontPx) + 'px system-ui, sans-serif';
+    ctx.fillStyle = color;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, pad, c.height / 2);
     const tex = new T.CanvasTexture(c);
     tex.encoding = T.sRGBEncoding;
     tex.anisotropy = 4;
-    const g = new T.PlaneGeometry(w / pxPerMm, c.height / pxPerMm);
-    const mesh = new T.Mesh(g, new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(mmX(px) + w / pxPerMm / 2, SVG_Y, mmZ(py));
-    scene.add(mesh);
-    return mesh;
-  }
-  function flatLabel(text, px, py, sizeSvgPx, color, info){
-    const m = makeLabel(text, px, py, sizeSvgPx, color);
-    if(info){ m.userData.info = info; informants.push(m); }
-    return m;
+    const g = new T.PlaneGeometry(c.width / PX_PER_MM, c.height / PX_PER_MM);
+    const m = new T.Mesh(g, new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(xmm, o.y !== undefined ? o.y : SILK_Y, zmm);
+    return tag(m, { parent: o.parent, info: o.info, pick: o.pick });
   }
 
-  /* ================= framing: plate, rail, PCB ================= */
-  box(187, 3, 98, 0, -2.5, 0, mat.plate, { info:'power' });            // DIN case base (hover -> power info)
-  box(187, 2, 15, 0, -4.9, 0, mat.rail);                              // DIN rail lip under the case
-  // standoffs
-  [[-80,-38],[ -80,38],[80,-38],[80,38],[-30,38],[30,-38]].forEach(p =>
-    cyl(2, 1, p[0], -0.5, p[1], mat.plastic));
-  box(175, 2, 90, 0, 1, 0, mat.pcb, { info:'iso' });                  // green board — hover reports isolation story
+  /* heights: base plate top y=3 · PCB top y=8 · shell panel y 15–17.2 */
+  const PCB_Y  = 8.05;    // silk printed on the PCB
+  const SILK_Y = 17.35;   // silk printed on the shell panel
+  const SCREW_Z = 46.8;   // exposed screw row on the protruding strips
 
-  /* copper border frame for flavour */
-  box(175, .3, 3, 0, 2.2, 44.2, mat.sub);
-  box(175, .3, 3, 0, 2.2, -44.2, mat.sub);
-  box(3, .3, 90, -86.2, 2.2, 0, mat.sub);
-  box(3, .3, 90, 86.2, 2.2, 0, mat.sub);
+  /* groups: static base + liftable roof shell */
+  const base = new T.Group(); scene.add(base);
+  const roof = new T.Group(); scene.add(roof);
 
-  /* ================= left column: power / RS485 / CAN terminals ================= */
-  function terminalBlock(x, z, w, d, n, info){
-    box(w, 7, d, x, 5.5, z, mat.block, { info });
-    for(let i = 0; i < n; i++){
-      const sx = x - (w / 2) + w * (i + 0.5) / n;
-      cyl(2.7, 7, sx, 5.5, z, mat.block, { info });
-      cyl(1.75, 1.4, sx, 9.55, z, mat.silver, { info });
-      slot(sx, 10.3, z);
+  /* small green service badge (box + white print), lives on the roof */
+  function badge(text, xmm, wMm, zMm){
+    box(wMm, .8, 6.5, xmm, 17.6, zMm || -31, mat.green, { parent: roof });
+    return makeLabel(text, xmm, zMm || -31, 2.6,
+      { color: '#eef3ef', weight: 700, y: 18.12, parent: roof });
+  }
+
+  /* ============================================================
+     STATIC BASE — plate, rear wall, orange feet, four corner posts
+     ============================================================ */
+  box(196, 4, 104, 0, 1, 0, mat.case, { parent: base, info: 'power' });         // base plate
+  box(194, 9, 2.5, 0, 3.5, -47.5, mat.case, { parent: base, info: 'power' });   // rear wall
+  [[-78, 40], [78, 40], [-78, -40], [78, -40]].forEach(p =>                     // orange feet
+    box(4, 2.4, 9, p[0], -1.7, p[1], mat.foot, { parent: base }));
+  [[-92, -46], [92, -46], [-92, 46], [92, 46]].forEach(p => {
+    box(9, 15, 9, p[0], 6.5, p[1], mat.case, { parent: base, info: 'power' });  // corner post
+    cyl(1.6, .5, p[0], 13.55, p[1], mat.dark, { parent: base });                // screw boss print
+  });
+
+  /* ============================================================
+     ROOF — upper shell (lifts in inspector mode)
+     panel plate rear edge at z = -36 (open PCB strip behind it)
+     ============================================================ */
+  box(176, 2.2, 81.5, 0, 16.1, 4.75, mat.case, { parent: roof, info: 'power' }); // top panel z -36…45.5
+  box(2.5, 14.2, 81.5, -87.25, 10, 4.75, mat.case, { parent: roof, info: 'power' }); // left wall
+  box(2.5, 14.2, 81.5,  87.25, 10, 4.75, mat.case, { parent: roof, info: 'power' }); // right wall
+  box(176, 3.7, 3.5, 0, 15.15, 42.6, mat.case, { parent: roof });               // front lip overhang
+  box(176, 10.2, 3.5, 0, 8.1, 46.5, mat.case, { parent: roof, info: 'power' }); // front fascia
+  for(let s = -1; s <= 1; s += 2)
+    for(let i = 0; i < 5; i++)                                                  // subtle side vents
+      box(.7, 2.6, 4.5, s * 88.5, 11, -12 + i * 9, mat.dark, { parent: roof });
+  [[-79, 33], [79, 33], [-79, -31], [79, -31]].forEach(p =>                     // shell screws on top
+    cyl(2, .5, p[0], 17.25, p[1], mat.silver, { parent: roof }));
+
+  /* ---------- rear service badges row (photo: little green boxes) ---------- */
+  badge('RS485', -68, 13);
+  makeLabel('VCC SCL SDA RXD TXD IO9 IO10', -30, -31, 2.3, { color: '#c6d2da', weight: 500, parent: roof });
+  badge('RGB', 8, 9);
+  badge('BOOT', 20, 10);
+  badge('USB', 34, 9);
+  badge('ETH', 50, 9);
+  badge('ANT', 64, 9);
+
+  /* ---------- title block (photo: WAVESHARE / share awesome hardware / …) ---------- */
+  makeLabel('WAVESHARE', 0, -24, 5.6, { color: '#f2f6f8', weight: 800, parent: roof });
+  makeLabel('share awesome hardware', 0, -19.8, 2.5, { color: '#5fd0c4', weight: 500, parent: roof });
+  makeLabel('ESP32-S3-ETH-8DI-8RO', 0, -14.6, 4.8, { color: '#41e0c8', italic: true, weight: 800, parent: roof });
+  box(46, .55, 1.1, 0, SILK_Y + .05, -11.6, mat.green, { parent: roof });
+  makeLabel('8CH Digital Inputs and 8CH Relay Outputs', 0, -8.6, 2.9, { color: '#dfe7ec', weight: 500, parent: roof });
+
+  /* ---------- field-side group headers + legends + printed circles ---------- */
+  const RO_X = [-58, -54, -50, -46, -42, -38, -34, -30, -26, -22];   // COM GND 1–8
+  const DI_X = []; for(let i = 0; i < 10; i++) DI_X.push(-17 + i * 3.9);
+  const circlesZ  = 33;
+  const legendsZ  = 26;
+
+  makeLabel('Digital Outputs (RO1–RO8)', -40, 14, 3.4,
+    { color: '#41e0c8', weight: 700, parent: roof, info: 'ro' });
+  makeLabel('Digital Inputs (DI1–DI8)',   0, 14, 3.4,
+    { color: '#41e0c8', weight: 700, parent: roof, info: 'di' });
+  badge('7~36V', 28, 14, 14);
+
+  function legend(txt, x, info){
+    return makeLabel(txt, x, legendsZ, 2.0,
+      { color: '#dfe7ec', weight: 700, parent: roof, info: info });
+  }
+  legend('COM', RO_X[0], 'ro'); legend('GND', RO_X[1], 'ro');
+  for(let i = 0; i < 8; i++) legend(String(i + 1), RO_X[2 + i], 'ro');
+  legend('COM', DI_X[0], 'di'); legend('GND', DI_X[1], 'di');
+  for(let i = 0; i < 8; i++) legend(String(i + 1), DI_X[2 + i], 'di');
+  legend('V+  V-', 28, 'power');
+
+  /* printed indicator circles: light up with their channel */
+  RO_X.forEach((x, i) => {
+    if(i >= 2) cyl(1.45, .38, x, SILK_Y, circlesZ, roLamps[i - 2],
+      { pick: 'RO' + (i - 1), info: 'ro', parent: roof });
+    else cyl(1.45, .38, x, SILK_Y, circlesZ, mat.printed.clone(), { info: 'ro', parent: roof });
+  });
+  DI_X.forEach((x, i) => {
+    if(i >= 2) cyl(1.45, .38, x, SILK_Y, circlesZ, diLamps[i - 2],
+      { pick: 'DI' + (i - 1), info: 'di', parent: roof });
+    else cyl(1.45, .38, x, SILK_Y, circlesZ, mat.printed.clone(), { info: 'di', parent: roof });
+  });
+  cyl(1.45, .38, 25, SILK_Y, circlesZ, mat.printed.clone(), { info: 'power', parent: roof });
+  cyl(1.45, .38, 31, SILK_Y, circlesZ, mat.printed.clone(), { info: 'power', parent: roof });
+
+  /* ============================================================
+     GREEN TERMINAL STRIPS (front, protruding under the lip)
+     body runs under the panel; the front carrier + screw row and
+     the wire entries stay visible in the fascia gap.
+     ============================================================ */
+  function stripBody(x0, x1, info){
+    box(x1 - x0, 5.4, 30, (x0 + x1) / 2, 10.7, 30, mat.green, { info });           // body y 8…13.4, z 15…45
+    box(x1 - x0, 5.5, 4.5, (x0 + x1) / 2, 10.75, 47.6, mat.green, { info });       // exposed carrier z 45.4…49.9
+  }
+  function socketSeparator(x){   // green rib between sockets on the carrier
+    box(1.1, 5.5, .8, x, 10.75, 49.2, mat.greenDk);
+  }
+  function socketAt(x, pick, info, ringMat){
+    cyl(1.3, 1.7, x, 14.25, SCREW_Z, mat.silver, { pick, info });                  // screw
+    const slotm = new T.Mesh(new T.BoxGeometry(2.6, .3, .6), mat.dark);
+    slotm.position.set(x, 15.15, SCREW_Z + .05);
+    slotm.rotation.y = 0.8;
+    scene.add(slotm);
+    if(info) slotm.userData.info = info;
+    box(2.4, 2.4, 1.4, x, 10.75, 49.6, mat.dark, { info });                        // wire entry
+    if(ringMat){                                                                   // status ring round the screw
+      const ring = new T.Mesh(new T.TorusGeometry(1.55, .26, 10, 26), ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(x, 15.5, SCREW_Z);
+      return tag(ring, { info });
+    }
+    return null;
+  }
+
+  /* RO strip: every channel (sockets 3–10) gets ring + circle + window */
+  RO_X.forEach((x, i) => {
+    socketAt(x, i >= 2 ? 'RO' + (i - 1) : null, 'ro', i >= 2 ? roLamps[i - 2] : null);
+    if(i < 9) socketSeparator(x + 2);
+  });
+
+  /* DI strip */
+  DI_X.forEach((x, i) => {
+    socketAt(x, i >= 2 ? 'DI' + (i - 1) : null, 'di', i >= 2 ? diLamps[i - 2] : null);
+    if(i < 9) socketSeparator(x + 1.95);
+  });
+
+  /* 7–36 V power block, sockets at +25 / +31 */
+  stripBody(21.5, 35.5, 'power');
+  socketAt(25, null, 'power', null);
+  socketAt(31, null, 'power', null);
+  socketSeparator(28);
+
+  /* ============================================================
+     REAR OPEN STRIP (z −45…−36, visible from top and rear)
+     RJ45 · USB-C · RST · RS485 A+/B− · 120Ω header · LEDs · SMA
+     ============================================================ */
+  /* RJ45, rear-left */
+  box(17, 7, 9, -52, 11.5, -41.5, mat.dark, { info: 'eth' });
+  box(11, 4, .9, -52, 11, -45.6, std(0x232a33, .8, .3), { info: 'eth' });
+  for(let r = 0; r < 2; r++) for(let c = 0; c < 4; c++)
+    box(2.4, 1.2, .5, -55.6 + c * 2.4, 12.6 - r * 2.2, -45.9, mat.gold, { info: 'eth' });
+  makeLabel('ETH', -52, -36.2, 2.2, { color: '#dfe7ec', y: PCB_Y, info: 'eth' });
+
+  /* USB-C */
+  box(9, 3.2, 6, -28, 9.6, -42, std(0x565f6b, .6, .4), { info: 'usbc' });
+  box(6.4, 1.8, 4.6, -28, 9.7, -44.2, mat.dark);
+  makeLabel('USB', -28, -36.4, 2.2, { color: '#dfe7ec', y: PCB_Y, info: 'usbc' });
+
+  /* RST button */
+  cyl(1.8, 2.2, -14, 9.1, -40, mat.plastic, { pick: 'reset', info: 'reset' });
+  cyl(1.55, .5, -14, 10.2, -40, resetMat, { pick: 'reset', info: 'reset' });
+  makeLabel('RST', -14, -35.8, 1.7, { color: '#dfe7ec', y: PCB_Y, info: 'reset' });
+
+  /* RS485 A+ / B− pluggable 2-pos */
+  box(12, 5, 7, 12, 10.4, -41, mat.green, { info: 'rs485' });
+  cyl(1.15, 1.6, 9.4, 13.4, -41, mat.silver, { info: 'rs485' });
+  cyl(1.15, 1.6, 14.6, 13.4, -41, mat.silver, { info: 'rs485' });
+  makeLabel('A+   B-', 12, -36.4, 2.0, { color: '#dfe7ec', y: PCB_Y, info: 'rs485' });
+
+  /* 120Ω termination header + jumper */
+  box(9, 1.6, 3, 30, 8.8, -40, mat.dark, { info: 'header' });
+  for(let i = 0; i < 3; i++) cyl(.6, 2.2, 27.5 + i * 2.5, 9.9, -40, mat.gold, { info: 'header' });
+  box(3, 1.3, 1.9, 27.5, 10.9, -40, mat.relayTop, { info: 'header' });
+  makeLabel('120Ω', 30, -35.8, 1.8, { color: '#dfe7ec', y: PCB_Y, info: 'header' });
+
+  /* status LEDs PWR / TXD / RXD */
+  [['pwr', 44], ['txd', 49], ['rxd', 54]].forEach(k => {
+    cyl(.95, 1.2, k[1], 8.6, -39, ledMats[k[0]], { info: 'leds' });
+    cyl(1.12, .32, k[1], 9.25, -39, ledMats[k[0]], { info: 'leds' });
+    makeLabel(k[0].toUpperCase(), k[1], -35.4, 1.7, { color: '#dfe7ec', y: PCB_Y, info: 'leds' });
+  });
+
+  /* SMA bulkhead + short rubber-duck, rear-left */
+  cyl(2.4, 1.2, -76, 8.6, -42, mat.gold, { info: 'sma' });
+  cyl(1.1, 1.6, -76, 9.7, -42, mat.gold, { info: 'sma' });
+  const duck = new T.Mesh(new T.CylinderGeometry(.85, 1.05, 13, 16), mat.caseDk);
+  duck.position.set(-76, 16, -42);
+  duck.rotation.z = 0.25;
+  scene.add(duck);
+  duck.userData.info = 'sma'; informants.push(duck);
+  const duckCap = new T.Mesh(new T.SphereGeometry(1.05, 12, 10), mat.caseDk);
+  duckCap.position.set(-77.6, 22.4, -42);
+  scene.add(duckCap);
+  duckCap.userData.info = 'sma'; informants.push(duckCap);
+
+  /* ============================================================
+     PCB + INTERIOR (rear strip + inspector mode when opened)
+     ============================================================ */
+  box(171, 2, 92, 0, 7, 0, mat.pcb, { info: 'iso' });                            // the board
+  box(171, .3, 2, 0, 8.15, 45, mat.sub);
+  box(171, .3, 2, 0, 8.15, -45, mat.sub);
+  box(2, .3, 92, -84.5, 8.15, 0, mat.sub);
+  box(2, .3, 92, 84.5, 8.15, 0, mat.sub);
+  makeLabel('ESP32-S3-ETH-8DI-8RO · DIN-rail gateway · 175 × 90 mm', -62, -37, 2.2,
+    { color: '#8d99a8', y: PCB_Y, info: 'power' });
+
+  /* MCU zone: WROOM carrier + shield */
+  box(28, 1, 18, -30, 8.5, -20, mat.sub);
+  box(23, 2.4, 14, -30, 10.2, -20, mat.metal, { info: 'mcu' });
+  box(17, .5, 9, -30, 11.55, -20, mat.chip, { info: 'mcu' });
+  makeLabel('ESP32-S3-WROOM-1U', -30, -9.4, 1.9, { color: '#b8c6cf', y: PCB_Y });
+  /* RTC + W5500 */
+  box(9, 1.6, 5, -52, 8.8, -26, mat.chip, { info: 'rtc' });
+  makeLabel('RTC', -52, -21.4, 1.9, { color: '#b8c6cf', y: PCB_Y, info: 'rtc' });
+  box(10, 1.6, 7, -68, 8.8, -26, mat.chip, { info: 'eth' });
+  makeLabel('W5500', -68, -20.4, 1.9, { color: '#b8c6cf', y: PCB_Y, info: 'eth' });
+  /* TCA9554 coil driver + expansion header */
+  box(9, 1.4, 5, 4, 8.7, -12, mat.chip, { info: 'ro' });
+  makeLabel('TCA9554 · EXIO1-8', 4, -7.4, 1.8, { color: '#b8c6cf', y: PCB_Y, info: 'ro' });
+  box(11, 2, 5, 26, 9, -12, mat.dark, { info: 'header' });
+  for(let i = 0; i < 6; i++) cyl(.7, 2.4, 22 + i * 1.6, 10.2, -12, mat.gold, { info: 'header' });
+  makeLabel('EXPANSION HEADER', 26, -7.2, 1.8, { color: '#b8c6cf', y: PCB_Y, info: 'header' });
+  /* buzzer */
+  cyl(3, 1.6, -8, 8.8, -2, buzzerMat, { pick: 'buzzer', info: 'buzzer' });
+  cyl(1.1, .4, -8, 9.75, -2, mat.dark, { pick: 'buzzer', info: 'buzzer' });
+
+  /* relays — blue cubes behind the RO strip, windows glow with the coil */
+  for(let i = 0; i < 8; i++){
+    const x = -50 + i * 4;
+    const cube = new T.Mesh(new T.BoxGeometry(3.4, 6.4, 10), mat.relay);
+    cube.position.set(x, 11.2, 6);
+    cube.userData.pick = 'RO' + (i + 1); cube.userData.info = 'ro';
+    cube.userData.baseY = 11.2;
+    scene.add(cube); pickables.push(cube); informants.push(cube);
+    relayCubes.push(cube);
+    const cap = box(3.0, .6, 9.2, x, 14.5, 6, mat.relayTop);
+    cap.userData.pick = 'RO' + (i + 1); cap.userData.info = 'ro';
+    pickables.push(cap); informants.push(cap);
+    const win = box(2.4, 2.6, .5, x, 11.4, 11.3, roLamps[i]);
+    win.userData.pick = 'RO' + (i + 1); win.userData.info = 'ro';
+    pickables.push(win); informants.push(win);
+  }
+  /* DI optocouplers behind the DI strip */
+  DI_X.forEach((x, i) => {
+    if(i < 2) return;
+    box(2.4, 1.8, 4.2, x, 8.9, 6, mat.chip, { info: 'iso' });
+  });
+  makeLabel('ISOLATION BARRIER', 0, 11.5, 2.2, { color: '#8fb5a8', y: PCB_Y, info: 'iso' });
+  makeLabel('field voltages stop right here', 0, 14.5, 1.8, { color: '#6f8278', y: PCB_Y });
+
+  /* ---------- RGB pixel + BOOT key on the panel, under their badges ---------- */
+  box(3.4, .8, 3.4, 8, 17.35, -27, rgbMat, { pick: 'rgb', info: 'rgb', parent: roof });
+  cyl(1.4, 1.0, 20, 17.7, -27, mat.plastic, { pick: 'boot', info: 'boot', parent: roof });
+  cyl(1.2, .5, 20, 18.1, -27, bootMat, { pick: 'boot', info: 'boot', parent: roof });
+
+  /* ============================================================
+     INSPECTOR MODE — the shell lifts and slides back like a lid
+     ============================================================ */
+  let coverOpen = false, coverT = 0;
+  function setCover(open){ coverOpen = !!open; }
+  function animateCover(){
+    const target = coverOpen ? 1 : 0;
+    coverT += (target - coverT) * 0.12;
+    if(((coverT < 0.999) && coverOpen) || ((coverT > 0.001) && !coverOpen)){
+      roof.position.y = coverT * 36;         // lift straight up
+      roof.position.z = -coverT * 18;        // and slide toward the rear
     }
   }
-  function slot(x, y, z){
-    const m = new T.Mesh(new T.BoxGeometry(3, .3, .5), mat.dark);
-    m.position.set(x, y, z);
-    m.rotation.y = 0.8;
-    scene.add(m);
-  }
-  terminalBlock(-66, -30, 22, 9, 2, 'power');                          // DC IN 7–36 V
-  terminalBlock(-66, -13, 22, 8, 2, 'rs485');                          // RS485 A+ / B−
-  terminalBlock(-66, 1, 22, 8, 2, 'can');                              // CAN H / L
-  flatLabel('DC IN 7–36 V', 66, 52, 10);
-  flatLabel('V+   V−', 92, 90, 9, '#7d8a9e');
-  flatLabel('RS485 · 17/18/21', 92, 144, 9);
-  flatLabel('A+   B−', 92, 190, 9, '#7d8a9e');
-  flatLabel('CAN · GPIO2/3', 92, 230, 9);
-  flatLabel('H    L', 92, 266, 9, '#7d8a9e');
 
-  /* ================= MCU zone ================= */
-  // WROOM carrier + metal shield
-  box(30, 1, 18, -24, 2.5, -17, mat.sub);
-  box(25, 2.4, 15, -24, 4.4, -17, mat.metal, { info:'mcu' });
-  box(20, .5, 10, -24, 5.85, -17, mat.chip);
-  box(3, .8, 3, -36.4, 3, -24, mat.gold, { info:'sma' });              // u.FL antenna pigtail corner
-
-  // RTC chip
-  box(12, 1.6, 6, -42.2, 2.8, -0.5, mat.chip, { info:'rtc' });
-  // expansion header with pin row
-  box(11, 2, 5, -12.2, 3, -0.5, mat.dark, { info:'header' });
-  for(let i = 0; i < 6; i++) cyl(.7, 2.4, -16 + i * 1.6, 4.2, -0.5, mat.gold);
-
-  /* isolation barrier: optocouplers + darlingtons */
-  const ISO_Z = mmZ(363);
-  for(let i = 0; i < 4; i++)
-    box(2.8, 1.6, 4, -15 + i * 3.5, 2.8, ISO_Z, mat.chip, { info:'iso' });
-  for(let i = 0; i < 4; i++)
-    box(2.8, 1.6, 4, 5 + i * 3.5, 2.8, ISO_Z, mat.chip, { info:'iso' });
-
-  /* ================= right column: network & services ================= */
-  // RJ45 + W5500
-  box(16, 12, 13, 68.1, 8, -30, mat.dark, { info:'eth' });
-  for(let r = 0; r < 2; r++) for(let c = 0; c < 4; c++)   // two rows of gold contacts on the RJ face
-    box(2.1, 1.5, .5, 68.1 - 5.2 + c * 3.4, 9.6 - r * 2.6, -36.45, mat.gold, { info:'eth' });
-  box(8, 1.4, 6, 56, 2.7, -30, mat.chip, { info:'eth' });
-  // PoE module
-  box(14, 3.4, 8, 68.1, 3.7, -19, mat.sub, { info:'poe' });
-  // USB-C
-  box(10, 3.2, 4.5, 68.1, 3.6, -13, std(0x565f6b, .6, .4), { info:'usbc' });
-  // TF slot
-  box(13, 1.8, 9, 68.1, 2.9, -8, mat.dark, { info:'tf' });
-
-  // WS2812 RGB pixel
-  box(4, 1.6, 4, 61.1, 2.8, -2.7, rgbMat, { pick:'rgb', info:'rgb' });
-  // Buzzer
-  cyl(2.6, 2.4, 68.7, 3.2, -2.7, buzzerMat, { pick:'buzzer', info:'buzzer' });
-  cyl(1, .4, 68.7, 4.4, -2.7, mat.dark, { pick:'buzzer', info:'buzzer' });
-  // BOOT button
-  cyl(2.4, 2.6, 75.1, 3.3, -2.7, mat.plastic, { pick:'boot', info:'boot' });
-  cyl(2.15, .5, 75.1, 4.4, -2.7, bootMat, { pick:'boot', info:'boot' });
-
-  // indicator LED domes PWR/TXD/RXD/CAN
-  const ledKinds = ['pwr','txd','rxd','can'];
-  ledKinds.forEach((k, i) => {
-    const x = 62.4 + i * 4.64;
-    cyl(1.05, 1.5, x, 2.75, 6, ledMats[k], { info:'leds' });
-    cyl(1.2, .35, x, 3.45, 6, ledMats[k], { info:'leds' });   // glowing top
-  });
-
-  // SMA antenna
-  cyl(2, 1.8, 61.05, 2.9, 15.6, mat.silver, { info:'sma' });
-  cyl(.6, 1.4, 61.05, 4.4, 15.6, mat.silver, { info:'sma' });
-  (function(){
-    const pts = [ new T.Vector3(61.05, 5, 15.6), new T.Vector3(61.05, 13, 15.6), new T.Vector3(67, 17, 12) ];
-    const g = new T.BufferGeometry().setFromPoints(pts);
-    scene.add(new T.Line(g, mat.antenna));
-  })();
-
-  // right column labels
-  flatLabel('W5500 ETH · 12-16,39', 871, 132, 9);
-  flatLabel('PoE · 802.3af', 871, 177, 9);
-  flatLabel('USB-C 5 V', 871, 212, 9);
-  flatLabel('TF · 45/47/48', 871, 246, 9);
-  flatLabel('RGB', 832, 306, 8);
-  flatLabel('BUZ', 875, 306, 8);
-  flatLabel('BOOT', 913, 306, 8);
-  flatLabel('SMA ANTENNA', 884, 406, 9);
-  [['pwr','PWR'],['txd','TXD'],['rxd','RXD'],['can','CAN']].forEach((d, i) => {
-    flatLabel(d[1], 828 + i * 26, 362, 8);
-  });
-
-  /* ================= MCU / barrier / titles labels ================= */
-  flatLabel('ESP32-S3-POE-ETH-8DI-8DO · DIN-rail 175 × 90 mm', 492, 44, 10, '#c3cddb');
-  flatLabel('ISOLATED FIELD SIDE — logic side left harmless', 38, 44, 9, '#7d8a9e');
-  flatLabel('ESP32-S3-WROOM-1U', 356, 250, 8);
-  flatLabel('LX7 · Wi-Fi/BLE · 16 MB', 356, 263, 7);
-  flatLabel('RTC · 40/41/42', 295, 298, 8);
-  flatLabel('EXPANSION HEADER', 421, 298, 7.5);
-  flatLabel('ISOLATION BARRIER', 490, 344, 9, '#8fb5a8');
-  flatLabel('OPTOCOUPLERS', 438, 367, 8, '#8fb5a8');
-  flatLabel('DARLINGTON', 542, 367, 8, '#8fb5a8');
-  flatLabel('field voltages stop right here', 490, 398, 8, '#6c7a8d');
-
-  /* ================= DI strip (bottom-left) ================= */
-  for(let i = 0; i < 8; i++){
-    const px = 82 + i * 49;
-    const x = mmX(px), zLamp = mmZ(492), zScrew = mmZ(506);
-    const m = glow(0x35d07f);
-    lampMats.di.push(m);
-    cyl(1.35, 1.5, x, 2.75, zLamp, m, { pick:'DI' + (i + 1), info:'di' });
-    cyl(1.4, .35, x, 3.45, zLamp, m, { pick:'DI' + (i + 1), info:'di' });
-    cyl(2.7, 1.6, x, 2.8, zScrew, mat.block, { pick:'DI' + (i + 1), info:'di' });
-    cyl(2.4, 1.5, x, 2.9, zScrew, mat.silver, { pick:'DI' + (i + 1), info:'di' });
-    slot(x, 3.7, zScrew);
-    flatLabel('DI' + (i + 1), px, 532, 9, '#c3cddb', 'di');
-    flatLabel('GPIO' + (i + 4), px, 542, 7, '#7d8a9e', 'di');
-  }
-  flatLabel('DIGITAL INPUTS · 5–36 V · OPTO ISOLATED · NPN / PNP', 256, 444, 9);
-
-  /* ================= DO strip (bottom-right) ================= */
-  for(let i = 0; i < 8; i++){
-    const px = 664 + i * 37.5;
-    const x = mmX(px), zLamp = mmZ(492), zScrew = mmZ(506);
-    const m = glow(0x35d07f);
-    lampMats.do.push(m);
-    cyl(1.3, 1.5, x, 2.75, zLamp, m, { pick:'DO' + (i + 1), info:'do' });
-    cyl(1.4, .35, x, 3.45, zLamp, m, { pick:'DO' + (i + 1), info:'do' });
-    cyl(3.3, 1.8, x, 2.9, zScrew, mat.block, { pick:'DO' + (i + 1), info:'do' });
-    cyl(2.9, 1.5, x, 3.05, zScrew, mat.silver, { pick:'DO' + (i + 1), info:'do' });
-    slot(x, 3.85, zScrew);
-    flatLabel('DO' + (i + 1), px, 532, 9, '#c3cddb', 'do');
-    flatLabel('EXIO' + (i + 1), px, 541, 6.5, '#7d8a9e', 'do');
-  }
-  flatLabel('DIGITAL OUTPUTS · SINK 500 mA · FLYBACK INSIDE', 790, 444, 9);
-
-  /* ================= interaction: orbit + hover + click ================= */
+  /* ============================================================
+     interaction: orbit + hover + click (unchanged contract)
+     ============================================================ */
   const raycaster = new T.Raycaster();
   const ndc = new T.Vector2();
   let dragging = false, moved = false, lastX = 0, lastY = 0;
@@ -340,7 +478,7 @@ function createBoard3D(container, hooks){
       const dx = e.clientX - lastX, dy = e.clientY - lastY;
       if(Math.abs(dx) + Math.abs(dy) > 3) moved = true;
       sph._theta -= dx * 0.006;
-      sph._phi = Math.max(deg(8), Math.min(deg(80), sph._phi - dy * 0.006));
+      sph._phi = Math.max(deg(8), Math.min(deg(78), sph._phi - dy * 0.006));
       lastX = e.clientX; lastY = e.clientY;
       if(hooks.onHover) hooks.onHover(null, e.clientX, e.clientY);
       return;
@@ -358,7 +496,7 @@ function createBoard3D(container, hooks){
   });
   el.addEventListener('wheel', e => {
     e.preventDefault();
-    sph._r = Math.max(95, Math.min(480, sph._r * Math.exp(e.deltaY * 0.001)));
+    sph._r = Math.max(110, Math.min(500, sph._r * Math.exp(e.deltaY * 0.001)));
   }, { passive: false });
   el.addEventListener('pointerleave', () => { if(hooks.onHover) hooks.onHover(null, -1, -1); });
 
@@ -374,29 +512,33 @@ function createBoard3D(container, hooks){
   else window.addEventListener('resize', fit);
   fit();
 
-  /* ================= render loop ================= */
-  (function tick(){
-    requestAnimationFrame(tick);
-    updateCamera();
-    renderer.render(scene, camera);
-  })();
-
   /* ================= state -> materials ================= */
   function setEmissive(m, on, color, intensity){
     m.emissiveIntensity = on ? (intensity || 1.7) : 0;
     if(on && color) m.emissive.set(color);
   }
 
+  /* relay "click": cube nudges toward the lift each frame.
+     Energized = armature pulled in (small lift + warm glow). */
+  function animateRelays(){
+    const s = hooks.readState();                     // live I/O state, cheap to poll
+    for(let i = 0; i < relayCubes.length; i++){
+      const cube = relayCubes[i];
+      const target = s.do[i] ? 0.45 : 0;
+      cube.position.y += (cube.userData.baseY + target - cube.position.y) * 0.22;
+      cube.rotation.x += ((s.do[i] ? -0.05 : 0) - cube.rotation.x) * 0.22;
+    }
+  }
+
   function sync(){
     const s = hooks.readState();
     for(let i = 0; i < 8; i++){
-      setEmissive(lampMats.di[i], s.di[i], 0x35d07f);
-      setEmissive(lampMats.do[i], s.do[i], 0x35d07f);
+      setEmissive(diLamps[i] || ledMats.rxd, s.di[i], 0x35d07f);
+      setEmissive(roLamps[i] || ledMats.rxd, s.do[i], 0xffa732, 2.0);
     }
     setEmissive(ledMats.pwr, true, 0xff5348);
     setEmissive(ledMats.txd, s.leds.txd, 0x44e07a);
     setEmissive(ledMats.rxd, s.leds.rxd, 0x3f7dff);
-    setEmissive(ledMats.can, s.leds.can, 0xb96bff);
     setEmissive(buzzerMat, s.buzzer, 0xffb454, 1.3);
     setEmissive(bootMat, s.boot, 0xc8a15a, 1.4);
     if(s.rgbColor){
@@ -411,9 +553,19 @@ function createBoard3D(container, hooks){
   }
   sync();
 
+  /* ================= render loop ================= */
+  (function tick(){
+    requestAnimationFrame(tick);
+    updateCamera();
+    animateCover();
+    animateRelays();
+    renderer.render(scene, camera);
+  })();
+
   return {
     sync,
     setTheme,
+    setCover,
     project(x, y, z){                        // world mm -> canvas px (tests & overlays)
       const v = new T.Vector3(x, y, z).project(camera);
       const r = renderer.domElement.getBoundingClientRect();
